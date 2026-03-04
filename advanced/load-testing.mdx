@@ -1,0 +1,592 @@
+---
+title: Load Testing
+description: Benchmark and stress test your APIs with configurable load testing capabilities
+---
+
+## Overview
+
+Eru includes a powerful load testing engine that enables you to test API performance under various load conditions. Measure response times, throughput, and error rates with detailed metrics and visualizations.
+
+<CardGroup cols={2}>
+  <Card title="Concurrency Testing" icon="gauge-high">
+    Test with multiple concurrent requests
+  </Card>
+  <Card title="Performance Metrics" icon="chart-line">
+    Detailed latency percentiles and throughput
+  </Card>
+  <Card title="Error Analysis" icon="triangle-exclamation">
+    Track failures and status code distribution
+  </Card>
+  <Card title="Response Time Distribution" icon="chart-bar">
+    Histogram visualization of response times
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+<Steps>
+  <Step title="Create Load Test Configuration">
+    ```go
+    config := types.LoadTestConfig{
+        Request: types.Request{
+            Method:  types.MethodGET,
+            URL:     "https://api.example.com/users",
+            Headers: map[string]string{
+                "Authorization": "Bearer token",
+            },
+        },
+        TotalRequests: 1000,
+        Concurrency:   50,
+    }
+    ```
+  </Step>
+  
+  <Step title="Run Load Test">
+    ```go
+    runner := loadtest.NewRunner()
+    result, err := runner.Run(config)
+    if err != nil {
+        log.Fatal(err)
+    }
+    ```
+  </Step>
+  
+  <Step title="Analyze Results">
+    ```go
+    fmt.Printf("Total Requests: %d\n", result.TotalRequests)
+    fmt.Printf("Success: %d (%.1f%%)\n", 
+        result.SuccessCount,
+        100 - result.ErrorRate)
+    fmt.Printf("Avg Response: %.2fms\n", result.AvgResponseMs)
+    fmt.Printf("P95: %dms\n", result.P95ResponseMs)
+    fmt.Printf("Throughput: %.2f req/s\n", result.RequestsPerSec)
+    ```
+  </Step>
+</Steps>
+
+## Load Test Configuration
+
+### Basic Configuration
+
+```go
+type LoadTestConfig struct {
+    Request       types.Request // Request template to execute
+    TotalRequests int          // Total number of requests
+    Concurrency   int          // Number of concurrent workers
+}
+```
+
+<Tabs>
+  <Tab title="Low Load">
+    ```go
+    config := types.LoadTestConfig{
+        Request:       request,
+        TotalRequests: 100,
+        Concurrency:   10,  // 10 concurrent requests
+    }
+    ```
+    Suitable for: Smoke testing, development environments
+  </Tab>
+  
+  <Tab title="Medium Load">
+    ```go
+    config := types.LoadTestConfig{
+        Request:       request,
+        TotalRequests: 1000,
+        Concurrency:   50,  // 50 concurrent requests
+    }
+    ```
+    Suitable for: Staging environments, moderate traffic simulation
+  </Tab>
+  
+  <Tab title="High Load">
+    ```go
+    config := types.LoadTestConfig{
+        Request:       request,
+        TotalRequests: 10000,
+        Concurrency:   100, // 100 concurrent requests
+    }
+    ```
+    Suitable for: Production capacity testing, peak load simulation
+  </Tab>
+</Tabs>
+
+### Request Template
+
+The load test executes the same request multiple times. Configure all aspects:
+
+```go
+request := types.Request{
+    Method: types.MethodPOST,
+    URL:    "https://api.example.com/orders",
+    Headers: map[string]string{
+        "Content-Type":  "application/json",
+        "Authorization": "Bearer token",
+    },
+    Body: `{
+        "product_id": "prod-123",
+        "quantity": 1
+    }`,
+    Auth: &types.Auth{
+        Type:  types.AuthTypeBearer,
+        Token: "your-token",
+    },
+}
+```
+
+## Running Load Tests
+
+### Synchronous Execution
+
+Run and wait for completion:
+
+```go
+runner := loadtest.NewRunner()
+result, err := runner.Run(config)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Results are available immediately
+analyzeResults(result)
+```
+
+### Monitor Progress
+
+Track progress while test is running:
+
+```go
+go func() {
+    for {
+        progress := runner.GetProgress(result.ID)
+        if progress == nil || !progress.IsRunning {
+            break
+        }
+        
+        fmt.Printf("\rProgress: %d/%d (%.1f req/s)",
+            progress.Completed,
+            progress.Total,
+            progress.CurrentRPS)
+        
+        time.Sleep(500 * time.Millisecond)
+    }
+}()
+
+result, _ := runner.Run(config)
+```
+
+Progress structure:
+
+```go
+type LoadTestProgress struct {
+    ID             string
+    Total          int     // Total requests to execute
+    Completed      int     // Requests completed so far
+    Succeeded      int     // Successful requests
+    Failed         int     // Failed requests
+    ElapsedSeconds float64 // Time elapsed
+    CurrentRPS     float64 // Current requests per second
+    IsRunning      bool    // Test is in progress
+}
+```
+
+### Cancel Running Test
+
+Stop a test before completion:
+
+```go
+testID := "test-123"
+cancelled := runner.Cancel(testID)
+if cancelled {
+    fmt.Println("Test cancelled")
+}
+```
+
+## Results and Metrics
+
+### Result Structure
+
+```go
+type LoadTestResult struct {
+    ID             string
+    StartedAt      int64   // Unix milliseconds
+    EndedAt        int64   // Unix milliseconds
+    DurationMs     int64   // Total test duration
+    TotalRequests  int     // Requests executed
+    SuccessCount   int     // Successful requests (2xx, 3xx)
+    FailureCount   int     // Failed requests
+    ErrorRate      float64 // Failure percentage
+    RequestsPerSec float64 // Throughput
+    
+    // Response time metrics (milliseconds)
+    AvgResponseMs  float64
+    MinResponseMs  int64
+    MaxResponseMs  int64
+    P50ResponseMs  int64   // Median
+    P90ResponseMs  int64
+    P95ResponseMs  int64
+    P99ResponseMs  int64
+    
+    // Breakdown
+    StatusCodes    map[int]int    // Status code distribution
+    Errors         map[string]int // Error type counts
+    Histogram      []HistogramBucket
+}
+```
+
+### Response Time Percentiles
+
+Understand your API's latency distribution:
+
+```go
+fmt.Printf("Response Time Distribution:\n")
+fmt.Printf("  Min:    %dms\n", result.MinResponseMs)
+fmt.Printf("  P50:    %dms (median)\n", result.P50ResponseMs)
+fmt.Printf("  P90:    %dms\n", result.P90ResponseMs)
+fmt.Printf("  P95:    %dms\n", result.P95ResponseMs)
+fmt.Printf("  P99:    %dms\n", result.P99ResponseMs)
+fmt.Printf("  Max:    %dms\n", result.MaxResponseMs)
+fmt.Printf("  Average: %.2fms\n", result.AvgResponseMs)
+```
+
+<Info>
+**Understanding Percentiles**
+
+- **P50 (Median)**: 50% of requests completed faster
+- **P90**: 90% of requests completed faster (good baseline)
+- **P95**: 95% of requests completed faster (common SLA)
+- **P99**: 99% of requests completed faster (tail latency)
+</Info>
+
+### Status Code Distribution
+
+See how your API responded:
+
+```go
+fmt.Println("Status Codes:")
+for code, count := range result.StatusCodes {
+    percentage := float64(count) / float64(result.TotalRequests) * 100
+    fmt.Printf("  %d: %d (%.1f%%)\n", code, count, percentage)
+}
+```
+
+Example output:
+```
+Status Codes:
+  200: 950 (95.0%)
+  500: 30 (3.0%)
+  503: 20 (2.0%)
+```
+
+### Error Analysis
+
+Identify failure patterns:
+
+```go
+if result.FailureCount > 0 {
+    fmt.Printf("\nErrors (%.1f%% failure rate):\n", result.ErrorRate)
+    for errType, count := range result.Errors {
+        fmt.Printf("  %s: %d\n", errType, count)
+    }
+}
+```
+
+Error types are automatically categorized:
+- `Connection refused` - Server not reachable
+- `Timeout` - Request took too long
+- `DNS resolution failed` - Invalid hostname
+
+Source: `apps/desktop/core/internal/loadtest/loadtest.go:180-188`
+
+### Response Time Histogram
+
+Visualize response time distribution:
+
+```go
+fmt.Println("\nResponse Time Distribution:")
+for _, bucket := range result.Histogram {
+    percentage := float64(bucket.Count) / float64(result.TotalRequests) * 100
+    fmt.Printf("  %-12s: %4d (%.1f%%)\n", 
+        bucket.RangeMs, bucket.Count, percentage)
+}
+```
+
+Example output:
+```
+Response Time Distribution:
+  0-50ms      :  245 (24.5%)
+  50-100ms    :  430 (43.0%)
+  100-200ms   :  250 (25.0%)
+  200-500ms   :   60 (6.0%)
+  500ms-1s    :   10 (1.0%)
+  1-2s        :    5 (0.5%)
+```
+
+Bucket ranges (predefined):
+- `0-50ms`
+- `50-100ms`
+- `100-200ms`
+- `200-500ms`
+- `500ms-1s`
+- `1-2s`
+- `2-5s`
+- `5s+`
+
+Source: `apps/desktop/core/internal/loadtest/loadtest.go:311-323`
+
+## Performance Optimization
+
+### Connection Pooling
+
+The load test runner uses HTTP connection pooling for efficiency:
+
+```go
+client := &http.Client{
+    Timeout: 30 * time.Second,
+    Transport: &http.Transport{
+        MaxIdleConns:        100,  // Total idle connections
+        MaxIdleConnsPerHost: 100,  // Idle per host
+        IdleConnTimeout:     90 * time.Second,
+    },
+}
+```
+
+Source: `apps/desktop/core/internal/loadtest/loadtest.go:36-42`
+
+<Note>
+Connections are reused across requests, significantly improving performance for high-concurrency tests.
+</Note>
+
+### Worker Pool Pattern
+
+Tests use a semaphore-based worker pool to control concurrency:
+
+```go
+semaphore := make(chan struct{}, config.Concurrency)
+
+for i := 0; i < config.TotalRequests; i++ {
+    semaphore <- struct{}{} // Acquire
+    go func() {
+        defer func() { <-semaphore }() // Release
+        executeRequest()
+    }()
+}
+```
+
+This ensures exactly `Concurrency` requests run simultaneously.
+
+## Authentication in Load Tests
+
+Load tests support all authentication types:
+
+<Tabs>
+  <Tab title="Bearer Token">
+    ```go
+    request.Auth = &types.Auth{
+        Type:  types.AuthTypeBearer,
+        Token: "your-access-token",
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Basic Auth">
+    ```go
+    request.Auth = &types.Auth{
+        Type:     types.AuthTypeBasic,
+        Username: "user",
+        Password: "pass",
+    }
+    ```
+  </Tab>
+  
+  <Tab title="API Key (Header)">
+    ```go
+    request.Auth = &types.Auth{
+        Type:           types.AuthTypeAPIKey,
+        APIKeyName:     "X-API-Key",
+        APIKeyValue:    "key123",
+        APIKeyLocation: "header",
+    }
+    ```
+  </Tab>
+  
+  <Tab title="API Key (Query)">
+    ```go
+    request.Auth = &types.Auth{
+        Type:           types.AuthTypeAPIKey,
+        APIKeyName:     "api_key",
+        APIKeyValue:    "key123",
+        APIKeyLocation: "query",
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Source: `apps/desktop/core/internal/loadtest/loadtest.go:267-282`
+
+## Use Cases
+
+### API Endpoint Benchmarking
+
+```go
+// Measure baseline performance
+config := types.LoadTestConfig{
+    Request:       getRequest,
+    TotalRequests: 500,
+    Concurrency:   25,
+}
+result, _ := runner.Run(config)
+
+fmt.Printf("Baseline P95: %dms\n", result.P95ResponseMs)
+```
+
+### Capacity Planning
+
+```go
+// Test increasing load levels
+concurrencyLevels := []int{10, 25, 50, 100, 200}
+
+for _, concurrency := range concurrencyLevels {
+    config := types.LoadTestConfig{
+        Request:       request,
+        TotalRequests: concurrency * 20,
+        Concurrency:   concurrency,
+    }
+    
+    result, _ := runner.Run(config)
+    
+    fmt.Printf("Concurrency %d: %.2f req/s, P95: %dms, Errors: %.1f%%\n",
+        concurrency,
+        result.RequestsPerSec,
+        result.P95ResponseMs,
+        result.ErrorRate)
+}
+```
+
+### Stress Testing
+
+```go
+// Push API to limits
+config := types.LoadTestConfig{
+    Request:       request,
+    TotalRequests: 10000,
+    Concurrency:   200,
+}
+
+result, _ := runner.Run(config)
+
+if result.ErrorRate > 1.0 {
+    fmt.Printf("WARNING: High error rate: %.1f%%\n", result.ErrorRate)
+}
+if result.P99ResponseMs > 1000 {
+    fmt.Printf("WARNING: High tail latency: %dms\n", result.P99ResponseMs)
+}
+```
+
+### Regression Testing
+
+```go
+// Compare against baseline
+baseline := getBaselineMetrics()
+current, _ := runner.Run(config)
+
+latencyIncrease := float64(current.P95ResponseMs - baseline.P95ResponseMs) / 
+                   float64(baseline.P95ResponseMs) * 100
+
+if latencyIncrease > 10.0 {
+    fmt.Printf("REGRESSION: P95 latency increased by %.1f%%\n", latencyIncrease)
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Start with Low Load">
+    Begin with low concurrency to establish a baseline, then gradually increase.
+  </Step>
+  
+  <Step title="Monitor Target Server">
+    Watch server metrics (CPU, memory, connections) during load tests to identify bottlenecks.
+  </Step>
+  
+  <Step title="Use Realistic Data">
+    Test with production-like request payloads and authentication.
+  </Step>
+  
+  <Step title="Account for Variance">
+    Run tests multiple times and average results to account for network variance.
+  </Step>
+  
+  <Step title="Test from Multiple Locations">
+    If possible, run load tests from different geographic locations to simulate real traffic.
+  </Step>
+</Steps>
+
+<Warning>
+**Production Load Testing**
+
+Be cautious when load testing production APIs:
+- Start with low load
+- Gradually increase concurrency
+- Monitor for impact on real users
+- Consider using a dedicated testing endpoint
+- Inform your team before testing
+</Warning>
+
+## Troubleshooting
+
+<Accordion title="High error rate (timeouts)">
+  **Symptoms**: Many `Timeout` errors in results
+  
+  **Possible causes**:
+  - Server cannot handle the load
+  - Network issues
+  - 30s timeout is too aggressive
+  
+  **Solutions**:
+  - Reduce concurrency
+  - Check server capacity
+  - Increase timeout (requires code modification)
+</Accordion>
+
+<Accordion title="Connection refused errors">
+  **Symptoms**: `Connection refused` errors
+  
+  **Possible causes**:
+  - Server is down
+  - Firewall blocking connections
+  - Server hit connection limit
+  
+  **Solutions**:
+  - Verify server is running
+  - Check firewall rules
+  - Increase server connection limits
+</Accordion>
+
+<Accordion title="Inconsistent results">
+  **Symptoms**: Results vary significantly between runs
+  
+  **Possible causes**:
+  - Network variance
+  - Server load from other sources
+  - Caching effects
+  
+  **Solutions**:
+  - Run tests multiple times
+  - Test during off-peak hours
+  - Disable caching for consistent results
+  - Average metrics across multiple runs
+</Accordion>
+
+<Accordion title="Low throughput despite low latency">
+  **Symptoms**: Good response times but low req/s
+  
+  **Possible causes**:
+  - Concurrency too low
+  - Client-side bottleneck
+  
+  **Solutions**:
+  - Increase concurrency
+  - Monitor client CPU/network usage
+  - Ensure connection pooling is working
+</Accordion>

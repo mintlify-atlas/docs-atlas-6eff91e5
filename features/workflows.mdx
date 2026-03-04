@@ -1,0 +1,824 @@
+---
+title: Workflows
+description: Chain multiple requests together with variable extraction, conditional logic, and request overrides
+---
+
+## Overview
+
+Workflows in Eru allow you to chain multiple requests together, extract data from responses using JSONPath, and use that data in subsequent requests. This is essential for testing complex API flows like authentication → data creation → data retrieval → cleanup.
+
+<Info>
+Workflows are stored in browser localStorage and can be saved, loaded, and executed multiple times with full step-by-step visibility.
+</Info>
+
+## Workflow Structure
+
+A workflow consists of multiple steps executed sequentially:
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:31-38
+interface Workflow {
+  id: string;
+  name: string;
+  description?: string;
+  steps: WorkflowStep[];
+  createdAt: number;
+  updatedAt: number;
+}
+```
+
+### Workflow Step
+
+Each step represents a single request with variable extraction:
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:15-29
+interface WorkflowStep {
+  id: string;
+  name: string;
+  requestId: string;     // Reference to existing request
+  order: number;
+  extractVariables: WorkflowVariable[];
+  // Overrides - these override the original request values
+  bodyOverride?: string;          // Override request body
+  headersOverride?: Record<string, string>;  // Override/add headers
+  urlOverride?: string;           // Override URL (optional)
+  // Execution state
+  status?: "pending" | "running" | "success" | "failed" | "skipped";
+  response?: Response;
+  error?: string;
+}
+```
+
+## Creating Workflows
+
+<Steps>
+  <Step title="Open Workflows Tab">
+    Click the **Workflows** tab in the sidebar
+  </Step>
+  
+  <Step title="Create New Workflow">
+    Click **+ New** in the saved workflows section
+  </Step>
+  
+  <Step title="Name Your Workflow">
+    Enter a descriptive name like "User Registration Flow" or "E2E Order Test"
+  </Step>
+  
+  <Step title="Add Steps">
+    Click **+ Add First Step** to add requests to your workflow
+  </Step>
+</Steps>
+
+## Adding Workflow Steps
+
+Each step references an existing request from your collections:
+
+<Tabs>
+  <Tab title="Select Request">
+    ### Choose Existing Request
+    
+    Click the request selector to open a fuzzy search dropdown:
+    
+    <Note>
+    The fuzzy search matches across request method, name, and URL for quick selection.
+    </Note>
+    
+    **Keyboard Navigation:**
+    - `↓` / `↑` - Navigate results
+    - `Enter` - Select highlighted request
+    - `Esc` - Close dropdown
+    - `Tab` - Move to next field
+  </Tab>
+  
+  <Tab title="Name the Step">
+    ### Step Naming
+    
+    Give each step a descriptive name:
+    - **Login** - Authenticate user
+    - **CreateProduct** - Create test product
+    - **GetProduct** - Verify product creation
+    - **DeleteProduct** - Cleanup
+    
+    <Tip>
+    Step names are used as prefixes for extracted variables (e.g., `{{Login.token}}`).
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Variable Extraction
+
+Extract data from responses using JSONPath expressions:
+
+### JSONPath Syntax
+
+<CodeGroup>
+```javascript Root Object
+// Extract from root level
+"$.token"           // Extracts: response.token
+"$.user.id"         // Extracts: response.user.id
+"$.data.attributes" // Extracts: response.data.attributes
+```
+
+```javascript Array Access
+// Extract from arrays
+"$.items[0].id"        // First item's ID
+"$.users[2].name"      // Third user's name
+"$.data.products[0]"   // First product
+```
+
+```javascript Nested Objects
+// Complex nested paths
+"$.response.data.user.profile.avatar"
+"$.results[0].metadata.createdAt"
+```
+</CodeGroup>
+
+### JSONPath Implementation
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:48-71
+function extractJsonPath(obj: unknown, path: string): string | undefined {
+  if (!path.startsWith("$")) return undefined;
+  
+  const parts = path.slice(2).split(/\.|\[|\]/).filter(Boolean);
+  let current: unknown = obj;
+  
+  for (const part of parts) {
+    if (current === null || current === undefined) return undefined;
+    if (typeof current !== "object") return undefined;
+    
+    const index = parseInt(part, 10);
+    if (!isNaN(index) && Array.isArray(current)) {
+      current = current[index];
+    } else {
+      current = (current as Record<string, unknown>)[part];
+    }
+  }
+  
+  if (current === null) return "null";
+  if (typeof current === "object") return JSON.stringify(current);
+  return String(current);
+}
+```
+
+### Adding Variables to Steps
+
+<Steps>
+  <Step title="Click Add Variable">
+    In the step's variables section, click **+ Add Variable**
+  </Step>
+  
+  <Step title="Name the Variable">
+    Enter a name (e.g., `token`, `userId`, `productId`)
+  </Step>
+  
+  <Step title="Define JSONPath">
+    Specify the path to extract (e.g., `$.access_token`, `$.data.id`)
+  </Step>
+  
+  <Step title="Test Extraction">
+    Click **Test Request** to execute the step and preview extracted values
+  </Step>
+</Steps>
+
+**Example:**
+
+```typescript
+// Step: Login
+extr actVariables: [
+  { name: "token", jsonPath: "$.access_token" },
+  { name: "userId", jsonPath: "$.user.id" },
+  { name: "expiresIn", jsonPath: "$.expires_in" }
+]
+
+// Response:
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": { "id": "12345", "email": "user@example.com" },
+  "expires_in": 3600
+}
+
+// Extracted variables:
+// {{Login.token}} = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+// {{Login.userId}} = "12345"
+// {{Login.expiresIn}} = "3600"
+```
+
+## Using Workflow Variables
+
+Reference extracted variables in subsequent steps:
+
+### Variable Syntax
+
+```
+{{StepName.variableName}}
+```
+
+**Examples:**
+
+<Tabs>
+  <Tab title="In URL">
+    ```
+    https://api.example.com/users/{{Login.userId}}
+    https://api.example.com/products/{{CreateProduct.productId}}
+    {{Login.baseUrl}}/api/v1/orders
+    ```
+  </Tab>
+  
+  <Tab title="In Headers">
+    ```json
+    {
+      "Authorization": "Bearer {{Login.token}}",
+      "X-User-ID": "{{Login.userId}}",
+      "X-Session-ID": "{{CreateSession.sessionId}}"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="In Body">
+    ```json
+    {
+      "userId": "{{Login.userId}}",
+      "productId": "{{CreateProduct.productId}}",
+      "quantity": 1,
+      "metadata": {
+        "sessionId": "{{CreateSession.sessionId}}"
+      }
+    }
+    ```
+    
+    <Info>
+    Variables in JSON bodies are intelligently interpolated - strings are auto-quoted, but valid JSON values (numbers, booleans, objects) are inserted raw.
+    </Info>
+  </Tab>
+</Tabs>
+
+### Variable Interpolation
+
+**Standard Interpolation (URLs, Headers):**
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:73-82
+function interpolateVariables(
+  text: string,
+  variables: Map<string, string>
+): string {
+  return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+    const value = variables.get(varName.trim());
+    return value !== undefined ? value : match;
+  });
+}
+```
+
+**JSON-Aware Interpolation (Request Body):**
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:85-102
+function interpolateVariablesJson(
+  text: string,
+  variables: Map<string, string>
+): string {
+  return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+    const value = variables.get(varName.trim());
+    if (value === undefined) return match;
+
+    // If value is already valid JSON (number, boolean, null, object, array), use as-is
+    try {
+      JSON.parse(value);
+      return value;
+    } catch {
+      // Not valid JSON, treat as raw string and JSON-stringify it
+      return JSON.stringify(value);
+    }
+  });
+}
+```
+
+## Request Overrides
+
+Override request parameters for specific workflow steps without modifying the original request:
+
+<Tabs>
+  <Tab title="Body Override">
+    ### Override Request Body
+    
+    Replace the original request body with workflow-specific content:
+    
+    ```json
+    {
+      "userId": "{{Login.userId}}",
+      "productName": "Test Product",
+      "price": 99.99,
+      "category": "electronics"
+    }
+    ```
+    
+    **Use Case:** Testing different scenarios with the same request template
+  </Tab>
+  
+  <Tab title="Headers Override">
+    ### Add/Override Headers
+    
+    Add workflow-specific headers or override existing ones:
+    
+    ```json
+    {
+      "Authorization": "Bearer {{Login.token}}",
+      "X-Test-Run": "workflow-execution",
+      "X-Step-ID": "create-product"
+    }
+    ```
+    
+    **Merge Behavior:**
+    - Original request headers are preserved
+    - Override headers are added or replace matching keys
+  </Tab>
+  
+  <Tab title="URL Override">
+    ### Override URL
+    
+    Replace the entire URL for a specific step:
+    
+    ```
+    {{Login.baseUrl}}/v2/products/{{CreateProduct.productId}}
+    ```
+    
+    **Use Case:** Testing different API versions or endpoints
+  </Tab>
+</Tabs>
+
+**Implementation:**
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:1494-1502
+const baseRequest: Request = {
+  ...request,
+  url: step.urlOverride || request.url,
+  body: step.bodyOverride !== undefined ? step.bodyOverride : request.body,
+  headers: step.headersOverride 
+    ? { ...request.headers, ...step.headersOverride }
+    : request.headers,
+};
+```
+
+## Executing Workflows
+
+Run the entire workflow with full visibility:
+
+<Steps>
+  <Step title="Click Run Workflow">
+    Click the **▶ Run Workflow** button in the workflow header
+  </Step>
+  
+  <Step title="Watch Execution">
+    Each step is executed sequentially with real-time status updates:
+    - **Pending** (gray) - Not yet started
+    - **Running** (blue, pulsing) - Currently executing
+    - **Success** (green) - Completed successfully
+    - **Failed** (red) - Execution error
+  </Step>
+  
+  <Step title="View Execution Log">
+    The execution log shows:
+    - Step start/completion times
+    - Response status and duration
+    - Extracted variable values
+    - Error messages (if any)
+  </Step>
+  
+  <Step title="Inspect Responses">
+    Each step shows:
+    - Response status code
+    - Response duration
+    - Full response body
+    - Extracted variable preview
+  </Step>
+</Steps>
+
+### Execution Implementation
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:1462-1557
+const executeWorkflow = async () => {
+  if (isRunning()) return;
+  
+  setIsRunning(true);
+  setExecutionLog([]);
+  setCollectedVariables(new Map());
+  
+  // Reset all step statuses
+  const w = workflow();
+  setWorkflow({
+    ...w,
+    steps: w.steps.map(s => ({ ...s, status: "pending", response: undefined, error: undefined })),
+  });
+
+  log(`Starting workflow: ${w.name}`, "info");
+
+  const variables = new Map<string, string>();
+
+  for (let i = 0; i < w.steps.length; i++) {
+    const step = workflow().steps[i];
+    const request = requestMap().get(step.requestId);
+    
+    if (!request) {
+      updateStep(step.id, { status: "failed", error: "Request not found" });
+      log(`Step ${i + 1} failed: Request not found`, "error");
+      continue;
+    }
+
+    updateStep(step.id, { status: "running" });
+    log(`Running step ${i + 1}: ${step.name}`, "info");
+
+    try {
+      // Build request with step overrides first
+      const baseRequest: Request = {
+        ...request,
+        url: step.urlOverride || request.url,
+        body: step.bodyOverride !== undefined ? step.bodyOverride : request.body,
+        headers: step.headersOverride 
+          ? { ...request.headers, ...step.headersOverride }
+          : request.headers,
+      };
+
+      // Then interpolate variables (use JSON-aware interpolation for body)
+      const interpolatedRequest: Request = {
+        ...baseRequest,
+        url: interpolateVariables(baseRequest.url, variables),
+        body: baseRequest.body ? interpolateVariablesJson(baseRequest.body, variables) : undefined,
+        headers: Object.fromEntries(
+          Object.entries(baseRequest.headers).map(([k, v]) => [k, interpolateVariables(v, variables)])
+        ),
+      };
+
+      // Execute the request
+      const response = await props.onExecuteRequest(interpolatedRequest);
+      
+      updateStep(step.id, { status: "success", response });
+      log(`Step ${i + 1} completed: ${response.status} (${response.duration}ms)`, "success");
+
+      // Extract variables from response
+      if (step.extractVariables.length > 0) {
+        try {
+          const responseBody = JSON.parse(response.body);
+          
+          for (const variable of step.extractVariables) {
+            const value = extractJsonPath(responseBody, variable.jsonPath);
+            if (value !== undefined) {
+              const fullName = `${step.name}.${variable.name}`;
+              variables.set(fullName, value);
+              
+              // Also update the variable value in the step for display
+              updateVariable(step.id, variable.id, { value });
+              log(`  Extracted {{${fullName}}} = ${value.substring(0, 50)}${value.length > 50 ? "..." : ""}`, "info");
+            } else {
+              log(`  Warning: Could not extract ${variable.name} from ${variable.jsonPath}`, "error");
+            }
+          }
+        } catch (e) {
+          log(`  Warning: Response body is not valid JSON`, "error");
+        }
+      }
+
+      setCollectedVariables(new Map(variables));
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      updateStep(step.id, { status: "failed", error: errorMsg });
+      log(`Step ${i + 1} failed: ${errorMsg}`, "error");
+    }
+
+    // Small delay between steps for visibility
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  log(`Workflow completed`, "success");
+  setIsRunning(false);
+};
+```
+
+## Testing Individual Steps
+
+Test a single step before running the full workflow:
+
+<Note>
+Testing a step uses variables collected from previous test runs, allowing incremental testing of the workflow.
+</Note>
+
+**Test Workflow:**
+1. Click **Test Request** on a step
+2. The step executes with current variable context
+3. Response is displayed below the step
+4. Variables are extracted and shown with preview values
+5. Use extracted variables in subsequent step tests
+
+## Workflow Examples
+
+### Example 1: User Authentication Flow
+
+<Steps>
+  <Step title="Step 1: Login">
+    **Request:** POST `/auth/login`
+    
+    **Body:**
+    ```json
+    {
+      "email": "test@example.com",
+      "password": "password123"
+    }
+    ```
+    
+    **Extract Variables:**
+    - `token` from `$.access_token`
+    - `refreshToken` from `$.refresh_token`
+    - `userId` from `$.user.id`
+  </Step>
+  
+  <Step title="Step 2: Get User Profile">
+    **Request:** GET `/users/{{Login.userId}}`
+    
+    **Headers:**
+    ```json
+    {
+      "Authorization": "Bearer {{Login.token}}"
+    }
+    ```
+    
+    **Extract Variables:**
+    - `email` from `$.email`
+    - `name` from `$.name`
+  </Step>
+  
+  <Step title="Step 3: Update Profile">
+    **Request:** PATCH `/users/{{Login.userId}}`
+    
+    **Headers:**
+    ```json
+    {
+      "Authorization": "Bearer {{Login.token}}"
+    }
+    ```
+    
+    **Body:**
+    ```json
+    {
+      "name": "Updated Name",
+      "bio": "Test bio"
+    }
+    ```
+  </Step>
+  
+  <Step title="Step 4: Logout">
+    **Request:** POST `/auth/logout`
+    
+    **Headers:**
+    ```json
+    {
+      "Authorization": "Bearer {{Login.token}}"
+    }
+    ```
+  </Step>
+</Steps>
+
+### Example 2: E-commerce Order Flow
+
+<CodeGroup>
+```json Step 1: Create Product
+POST /products
+Body:
+{
+  "name": "Test Product",
+  "price": 29.99,
+  "stock": 100
+}
+
+Extract:
+- productId from $.id
+```
+
+```json Step 2: Add to Cart
+POST /cart/items
+Headers: { "Authorization": "Bearer {{Auth.token}}" }
+Body:
+{
+  "productId": "{{CreateProduct.productId}}",
+  "quantity": 2
+}
+
+Extract:
+- cartId from $.cartId
+```
+
+```json Step 3: Create Order
+POST /orders
+Headers: { "Authorization": "Bearer {{Auth.token}}" }
+Body:
+{
+  "cartId": "{{AddToCart.cartId}}",
+  "shippingAddress": "123 Test St"
+}
+
+Extract:
+- orderId from $.id
+- orderNumber from $.orderNumber
+```
+
+```json Step 4: Get Order Status
+GET /orders/{{CreateOrder.orderId}}
+Headers: { "Authorization": "Bearer {{Auth.token}}" }
+
+Extract:
+- status from $.status
+- total from $.total
+```
+
+```json Step 5: Cancel Order (Cleanup)
+DELETE /orders/{{CreateOrder.orderId}}
+Headers: { "Authorization": "Bearer {{Auth.token}}" }
+```
+</CodeGroup>
+
+## Workflow Storage
+
+Workflows are stored in browser localStorage:
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:1175-1199
+const WORKFLOWS_STORAGE_KEY = "api_client_workflows";
+
+const loadSavedWorkflows = () => {
+  try {
+    const stored = localStorage.getItem(WORKFLOWS_STORAGE_KEY);
+    if (stored) {
+      const workflows = JSON.parse(stored) as Workflow[];
+      setSavedWorkflows(workflows);
+      return workflows;
+    }
+  } catch (e) {
+    console.error("Failed to load workflows:", e);
+  }
+  return [];
+};
+
+const persistWorkflows = (workflows: Workflow[]) => {
+  try {
+    localStorage.setItem(WORKFLOWS_STORAGE_KEY, JSON.stringify(workflows));
+  } catch (e) {
+    console.error("Failed to save workflows:", e);
+  }
+};
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive Step Names" icon="tag">
+    Use clear step names that describe the action:
+    - ✅ "CreateUser", "GetUserProfile", "DeleteUser"
+    - ❌ "Step1", "Request2", "Test"
+    
+    Step names become variable prefixes!
+  </Card>
+  
+  <Card title="Consistent Variable Names" icon="code">
+    Use consistent naming across workflows:
+    - `token` (not `authToken`, `access_token`, `jwt`)
+    - `userId` (not `user_id`, `id`, `uid`)
+    - `productId` (not `product_id`, `pid`)
+  </Card>
+  
+  <Card title="Test Incrementally" icon="flask">
+    Test each step individually before running the full workflow. This helps identify issues early.
+  </Card>
+  
+  <Card title="Add Cleanup Steps" icon="broom">
+    Include cleanup steps to delete test data:
+    - Delete created users
+    - Cancel test orders
+    - Remove test products
+  </Card>
+</CardGroup>
+
+### Error Handling
+
+<Tip>
+**Workflow execution continues even if a step fails**, allowing you to see which steps succeed and which fail. Check the execution log for detailed error messages.
+</Tip>
+
+## Variable Priority
+
+When the same variable name exists in multiple sources:
+
+1. **Workflow variables** (from previous steps) - Highest priority
+2. **Environment variables** - Lower priority
+3. **Undefined** - Variable placeholder remains if not found
+
+```typescript
+// If both exist:
+// Environment: baseUrl = "https://api.prod.example.com"
+// Workflow: Login.baseUrl = "https://api.dev.example.com"
+
+// Using {{Login.baseUrl}} → "https://api.dev.example.com" (workflow wins)
+// Using {{baseUrl}} → "https://api.prod.example.com" (environment)
+```
+
+## Troubleshooting
+
+<Accordion title="Variable not being replaced">
+  **Check:**
+  1. Variable was extracted in a previous step (check execution log)
+  2. Step name matches exactly (case-sensitive): `{{Login.token}}` not `{{login.token}}`
+  3. Variable name matches: `{{Login.userId}}` not `{{Login.user_id}}`
+  4. JSONPath is correct (test the step to preview extraction)
+</Accordion>
+
+<Accordion title="JSONPath extraction returns undefined">
+  **Common issues:**
+  1. Path doesn't start with `$`: Use `$.data.id` not `data.id`
+  2. Case mismatch: `$.userId` vs `$.UserId`
+  3. Array index out of bounds: `$.items[5]` when only 3 items
+  4. Response body is not JSON (check step response)
+  
+  **Test extraction:**
+  - Click "Test Request" on the step
+  - View response body
+  - Verify JSONPath matches the structure
+</Accordion>
+
+<Accordion title="Workflow executes out of order">
+  Workflows always execute sequentially (top to bottom). If steps seem out of order:
+  1. Check the step `order` values (should be 0, 1, 2, ...)
+  2. Use the ↑ / ↓ buttons to reorder steps
+  3. Save and re-run the workflow
+</Accordion>
+
+<Accordion title="Request override not working">
+  Ensure:
+  1. Override section is expanded (click "Edit Body/Headers")
+  2. Correct tab is selected (Body / Headers / URL)
+  3. JSON is valid (for body overrides)
+  4. Variables are properly interpolated: `{{StepName.var}}`
+</Accordion>
+
+## Advanced Features
+
+### Nested Object Extraction
+
+Extract entire objects or arrays:
+
+```json
+// Response:
+{
+  "user": {
+    "id": 123,
+    "profile": {
+      "name": "John Doe",
+      "avatar": "https://example.com/avatar.jpg"
+    }
+  }
+}
+
+// Extract entire profile object:
+// JSONPath: $.user.profile
+// Result: {"name":"John Doe","avatar":"https://example.com/avatar.jpg"}
+
+// Use in next step:
+{
+  "userProfile": {{CreateUser.profile}}
+}
+```
+
+### Dynamic URL Construction
+
+```typescript
+// Step 1: Get API config
+extractVariables: [
+  { name: "apiVersion", jsonPath: "$.version" },
+  { name: "region", jsonPath: "$.region" }
+]
+
+// Step 2: Use dynamic URL
+url: "https://{{GetConfig.region}}.api.example.com/{{GetConfig.apiVersion}}/users"
+// Result: https://us-west.api.example.com/v2/users
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Requests" icon="paper-plane" href="/features/requests">
+    Create requests to use in workflows
+  </Card>
+  
+  <Card title="Environments" icon="globe" href="/features/environments">
+    Combine workflow and environment variables
+  </Card>
+  
+  <Card title="Collections" icon="folder" href="/features/collections">
+    Organize workflow requests in collections
+  </Card>
+  
+  <Card title="Response Comparison" icon="code-compare" href="/advanced/response-diff">
+    Compare workflow results across runs
+  </Card>
+</CardGroup>

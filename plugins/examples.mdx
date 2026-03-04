@@ -1,0 +1,673 @@
+---
+title: Plugin Examples
+description: Real working plugin examples extracted from the Eru codebase
+---
+
+Learn from practical examples that demonstrate common plugin patterns and use cases. All examples are extracted from the actual Eru source code.
+
+## Basic Header Injection
+
+The simplest type of plugin adds a custom header to every request.
+
+<CodeGroup>
+```typescript TypeScript (SDK)
+import { definePlugin, addHeader } from '@api-client/plugin-sdk';
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    // Add a custom header to the request
+    const modifiedRequest = addHeader(
+      ctx.request,
+      'X-Example',
+      'true'
+    );
+
+    ctx.log.info('Added X-Example header to request');
+
+    return { request: modifiedRequest };
+  },
+
+  onPostResponse(ctx) {
+    // Log response status
+    ctx.log.info(`Response received: ${ctx.response?.statusCode}`);
+
+    return { response: ctx.response! };
+  },
+});
+```
+
+```javascript JavaScript (Plain)
+function onPreRequest(ctx) {
+  console.log('Plugin: onPreRequest called for ' + ctx.request.url);
+
+  // Add a custom header
+  if (!ctx.request.headers) {
+    ctx.request.headers = {};
+  }
+  ctx.request.headers['X-Plugin-Executed'] = 'true';
+
+  return {
+    request: ctx.request
+  };
+}
+
+function onPostResponse(ctx) {
+  console.log('Plugin: onPostResponse called with status ' + ctx.response.statusCode);
+
+  return {
+    response: ctx.response
+  };
+}
+
+// Export hooks
+var exports = {
+  onPreRequest: onPreRequest,
+  onPostResponse: onPostResponse
+};
+```
+</CodeGroup>
+
+<Tip>
+  Use the TypeScript SDK for better type safety and IDE autocomplete. The JavaScript version is useful for quick prototyping.
+</Tip>
+
+### Manifest
+
+```json manifest.json
+{
+  "id": "example-add-header",
+  "name": "Add Header Example",
+  "version": "1.0.0",
+  "description": "Adds X-Example: true header to all requests",
+  "permissions": [],
+  "main": "index.js"
+}
+```
+
+## Authentication Plugin
+
+A more advanced plugin that handles OAuth-style authentication with token storage and refresh.
+
+```typescript
+import {
+  definePlugin,
+  addHeader,
+  parseJsonBody,
+  isError
+} from '@api-client/plugin-sdk';
+
+interface TokenData {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  token_type: string;
+}
+
+interface ErrorResponse {
+  error: string;
+  error_description?: string;
+}
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    // Skip auth for token endpoint
+    if (ctx.request.url.includes('/oauth/token')) {
+      return { request: ctx.request };
+    }
+
+    // Get stored access token
+    const token = ctx.storage.get<string>('access_token');
+    const expiresAt = ctx.storage.get<number>('expires_at');
+
+    // Check if token exists and is not expired
+    const now = Date.now();
+    if (token && expiresAt && expiresAt > now) {
+      const authedRequest = addHeader(
+        ctx.request,
+        'Authorization',
+        `Bearer ${token}`
+      );
+
+      ctx.log.debug('Added auth token (expires in', expiresAt - now, 'ms)');
+      return { request: authedRequest };
+    }
+
+    // Token expired or missing
+    if (token && expiresAt && expiresAt <= now) {
+      ctx.log.warn('Access token expired');
+      // In a real plugin, you might trigger a refresh flow here
+    } else {
+      ctx.log.warn('No access token available');
+    }
+
+    return { request: ctx.request };
+  },
+
+  onPostResponse(ctx) {
+    if (!ctx.response) return { response: ctx.response! };
+
+    // Handle token endpoint responses
+    if (ctx.request.url.includes('/oauth/token')) {
+      const data = parseJsonBody<TokenData>(ctx.response);
+
+      if (data && data.access_token) {
+        // Store token and expiration time
+        ctx.storage.set('access_token', data.access_token);
+        
+        if (data.refresh_token) {
+          ctx.storage.set('refresh_token', data.refresh_token);
+        }
+
+        // Calculate expiration timestamp
+        const expiresAt = Date.now() + (data.expires_in * 1000);
+        ctx.storage.set('expires_at', expiresAt);
+
+        ctx.log.info('Stored new access token (expires in', data.expires_in, 's)');
+      } else if (isError(ctx.response)) {
+        const error = parseJsonBody<ErrorResponse>(ctx.response);
+        ctx.log.error('Token request failed:', error?.error_description || 'Unknown error');
+      }
+    }
+
+    // Handle 401 Unauthorized responses
+    if (ctx.response.statusCode === 401) {
+      ctx.log.warn('Received 401 Unauthorized - token may be invalid');
+      // Clear stored token
+      ctx.storage.delete('access_token');
+      ctx.storage.delete('expires_at');
+    }
+
+    return { response: ctx.response };
+  }
+});
+```
+
+### Manifest
+
+```json manifest.json
+{
+  "id": "oauth-helper",
+  "name": "OAuth Authentication Helper",
+  "version": "1.0.0",
+  "description": "Automatically adds OAuth tokens and handles token refresh",
+  "permissions": [],
+  "main": "index.js"
+}
+```
+
+<Info>
+  This plugin uses storage to persist tokens across requests. The token is automatically added to all non-auth requests.
+</Info>
+
+## Response Transformation
+
+Transform response bodies to add metadata or modify structure.
+
+```typescript
+import {
+  definePlugin,
+  parseJsonBody,
+  isSuccess
+} from '@api-client/plugin-sdk';
+
+export default definePlugin({
+  onPostResponse(ctx) {
+    if (!ctx.response) return { response: ctx.response! };
+
+    // Only transform successful JSON responses
+    if (!isSuccess(ctx.response)) {
+      return { response: ctx.response };
+    }
+
+    // Check if response is JSON
+    const contentType = ctx.response.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      return { response: ctx.response };
+    }
+
+    const data = parseJsonBody<any>(ctx.response);
+    if (!data) {
+      ctx.log.warn('Failed to parse JSON response');
+      return { response: ctx.response };
+    }
+
+    // Add metadata wrapper
+    const transformed = {
+      meta: {
+        timestamp: Date.now(),
+        url: ctx.request.url,
+        method: ctx.request.method,
+        duration: ctx.response.duration,
+        statusCode: ctx.response.statusCode
+      },
+      data: data
+    };
+
+    // Update response body
+    ctx.response.body = JSON.stringify(transformed, null, 2);
+    
+    ctx.log.info('Added metadata wrapper to response');
+
+    return { response: ctx.response };
+  }
+});
+```
+
+**Before:**
+```json
+{
+  "id": 123,
+  "name": "John Doe"
+}
+```
+
+**After:**
+```json
+{
+  "meta": {
+    "timestamp": 1709542800000,
+    "url": "https://api.example.com/users/123",
+    "method": "GET",
+    "duration": 145,
+    "statusCode": 200
+  },
+  "data": {
+    "id": 123,
+    "name": "John Doe"
+  }
+}
+```
+
+## Request Logging Plugin
+
+Log detailed information about requests and responses for debugging.
+
+```typescript
+import {
+  definePlugin,
+  isSuccess,
+  isError,
+  parseJsonBody
+} from '@api-client/plugin-sdk';
+
+interface RequestLog {
+  timestamp: number;
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  bodyPreview?: string;
+}
+
+interface ResponseLog {
+  timestamp: number;
+  statusCode: number;
+  duration: number;
+  bodyPreview?: string;
+}
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    const log: RequestLog = {
+      timestamp: Date.now(),
+      method: ctx.request.method,
+      url: ctx.request.url,
+      headers: { ...ctx.request.headers }
+    };
+
+    // Add body preview (first 100 chars)
+    if (ctx.request.body) {
+      log.bodyPreview = ctx.request.body.substring(0, 100);
+      if (ctx.request.body.length > 100) {
+        log.bodyPreview += '...';
+      }
+    }
+
+    // Redact sensitive headers
+    if (log.headers['Authorization']) {
+      log.headers['Authorization'] = '[REDACTED]';
+    }
+    if (log.headers['X-API-Key']) {
+      log.headers['X-API-Key'] = '[REDACTED]';
+    }
+
+    ctx.log.info('REQUEST:', JSON.stringify(log, null, 2));
+
+    return { request: ctx.request };
+  },
+
+  onPostResponse(ctx) {
+    if (!ctx.response) return { response: ctx.response! };
+
+    const log: ResponseLog = {
+      timestamp: Date.now(),
+      statusCode: ctx.response.statusCode,
+      duration: ctx.response.duration
+    };
+
+    // Add body preview
+    if (ctx.response.body) {
+      log.bodyPreview = ctx.response.body.substring(0, 100);
+      if (ctx.response.body.length > 100) {
+        log.bodyPreview += '...';
+      }
+    }
+
+    // Use appropriate log level based on status
+    if (isSuccess(ctx.response)) {
+      ctx.log.info('RESPONSE:', JSON.stringify(log, null, 2));
+    } else if (isError(ctx.response)) {
+      ctx.log.error('RESPONSE ERROR:', JSON.stringify(log, null, 2));
+    } else {
+      ctx.log.warn('RESPONSE:', JSON.stringify(log, null, 2));
+    }
+
+    return { response: ctx.response };
+  }
+});
+```
+
+## Request Validation Plugin
+
+Validate requests before execution and abort if validation fails.
+
+```typescript
+import { definePlugin } from '@api-client/plugin-sdk';
+
+interface ValidationRule {
+  pattern: RegExp;
+  requiredHeaders: string[];
+}
+
+const VALIDATION_RULES: Record<string, ValidationRule> = {
+  'api.example.com': {
+    pattern: /^https:\/\/api\.example\.com/,
+    requiredHeaders: ['Authorization', 'X-API-Version']
+  }
+};
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    const url = ctx.request.url;
+
+    // Check if URL matches any validation rules
+    for (const [domain, rule] of Object.entries(VALIDATION_RULES)) {
+      if (rule.pattern.test(url)) {
+        // Check for required headers
+        for (const header of rule.requiredHeaders) {
+          if (!ctx.request.headers[header]) {
+            ctx.log.error(
+              `Validation failed: Missing required header '${header}' for ${domain}`
+            );
+
+            return {
+              request: ctx.request,
+              abort: true,
+              abortReason: `Missing required header: ${header}`
+            };
+          }
+        }
+
+        ctx.log.info(`Validation passed for ${domain}`);
+      }
+    }
+
+    // Validate HTTPS for production environments
+    if (ctx.environment?.name === 'Production') {
+      if (!url.startsWith('https://')) {
+        ctx.log.error('Production requests must use HTTPS');
+
+        return {
+          request: ctx.request,
+          abort: true,
+          abortReason: 'HTTPS required for production'
+        };
+      }
+    }
+
+    return { request: ctx.request };
+  }
+});
+```
+
+<Warning>
+  When aborting a request, always provide a clear `abortReason` to help users understand why the request was blocked.
+</Warning>
+
+## Rate Limiting Plugin
+
+Implement client-side rate limiting using plugin storage.
+
+```typescript
+import { definePlugin } from '@api-client/plugin-sdk';
+
+interface RateLimitState {
+  requests: number[];
+  windowStart: number;
+}
+
+const RATE_LIMIT = 100; // requests per window
+const WINDOW_MS = 60000; // 1 minute
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    const now = Date.now();
+    const state = ctx.storage.get<RateLimitState>('rate_limit') || {
+      requests: [],
+      windowStart: now
+    };
+
+    // Reset window if needed
+    if (now - state.windowStart > WINDOW_MS) {
+      state.requests = [];
+      state.windowStart = now;
+    }
+
+    // Remove requests older than window
+    state.requests = state.requests.filter(
+      timestamp => now - timestamp < WINDOW_MS
+    );
+
+    // Check rate limit
+    if (state.requests.length >= RATE_LIMIT) {
+      const oldestRequest = Math.min(...state.requests);
+      const retryAfter = Math.ceil((oldestRequest + WINDOW_MS - now) / 1000);
+
+      ctx.log.warn(
+        `Rate limit exceeded (${RATE_LIMIT} requests per minute). Retry after ${retryAfter}s`
+      );
+
+      return {
+        request: ctx.request,
+        abort: true,
+        abortReason: `Rate limit exceeded. Retry after ${retryAfter} seconds`
+      };
+    }
+
+    // Add current request timestamp
+    state.requests.push(now);
+    ctx.storage.set('rate_limit', state);
+
+    const remaining = RATE_LIMIT - state.requests.length;
+    ctx.log.debug(`Rate limit: ${remaining} requests remaining`);
+
+    return { request: ctx.request };
+  }
+});
+```
+
+## Environment Variable Injection
+
+Automatically inject environment variables into request headers.
+
+```typescript
+import { definePlugin, addHeader } from '@api-client/plugin-sdk';
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    if (!ctx.environment) {
+      ctx.log.debug('No environment active');
+      return { request: ctx.request };
+    }
+
+    let modifiedRequest = ctx.request;
+    const vars = ctx.environment.variables;
+
+    // Inject API key from environment
+    if (vars.API_KEY) {
+      modifiedRequest = addHeader(modifiedRequest, 'X-API-Key', vars.API_KEY);
+      ctx.log.debug('Injected API_KEY from environment');
+    }
+
+    // Inject base URL from environment
+    if (vars.BASE_URL && modifiedRequest.url.startsWith('/')) {
+      modifiedRequest.url = vars.BASE_URL + modifiedRequest.url;
+      ctx.log.debug('Prepended BASE_URL from environment');
+    }
+
+    // Inject custom headers from environment
+    const headerPrefix = 'HEADER_';
+    for (const [key, value] of Object.entries(vars)) {
+      if (key.startsWith(headerPrefix)) {
+        const headerName = key.substring(headerPrefix.length);
+        modifiedRequest = addHeader(modifiedRequest, headerName, value);
+        ctx.log.debug(`Injected ${headerName} from environment variable ${key}`);
+      }
+    }
+
+    ctx.log.info(`Applied environment: ${ctx.environment.name}`);
+
+    return { request: modifiedRequest };
+  }
+});
+```
+
+**Environment Variables:**
+```json
+{
+  "name": "Development",
+  "variables": {
+    "BASE_URL": "https://dev.api.example.com",
+    "API_KEY": "dev-key-123",
+    "HEADER_X-Client-ID": "dev-client",
+    "HEADER_X-Environment": "development"
+  }
+}
+```
+
+## Testing Your Plugin
+
+Create a test suite for your plugin:
+
+```typescript
+import { Plugin, PluginContext, Request, Response } from '@api-client/plugin-sdk';
+import plugin from './index';
+
+// Mock storage
+const createMockStorage = () => {
+  const store = new Map<string, any>();
+  return {
+    get: <T>(key: string) => store.get(key) as T | undefined,
+    set: <T>(key: string, value: T) => store.set(key, value),
+    delete: (key: string) => store.delete(key),
+    clear: () => store.clear()
+  };
+};
+
+// Mock logger
+const createMockLogger = () => ({
+  info: console.log,
+  warn: console.warn,
+  error: console.error,
+  debug: console.debug
+});
+
+// Create test context
+const createContext = (request: Partial<Request> = {}): PluginContext => ({
+  request: {
+    id: '123',
+    method: 'GET',
+    url: 'https://api.example.com/test',
+    headers: {},
+    ...request
+  },
+  storage: createMockStorage(),
+  log: createMockLogger()
+});
+
+// Test cases
+const ctx = createContext();
+const result = plugin.onPreRequest!(ctx);
+
+console.assert(
+  result.request.headers['X-Example'] === 'true',
+  'Should add X-Example header'
+);
+
+console.log('All tests passed!');
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="shield-check">
+    Always wrap plugin logic in try-catch blocks to prevent crashes.
+
+    ```typescript
+    onPreRequest(ctx) {
+      try {
+        // Plugin logic
+      } catch (error) {
+        ctx.log.error('Plugin error:', error);
+        return { request: ctx.request };
+      }
+    }
+    ```
+  </Card>
+
+  <Card title="Immutable Updates" icon="lock">
+    Use helper functions that return new objects instead of mutating.
+
+    ```typescript
+    // Good: immutable
+    const updated = addHeader(ctx.request, 'X-Key', 'value');
+
+    // Bad: mutation
+    ctx.request.headers['X-Key'] = 'value';
+    ```
+  </Card>
+
+  <Card title="Logging Levels" icon="list">
+    Use appropriate log levels for different message types.
+
+    ```typescript
+    ctx.log.debug('Verbose details');
+    ctx.log.info('Normal operations');
+    ctx.log.warn('Potential issues');
+    ctx.log.error('Actual errors');
+    ```
+  </Card>
+
+  <Card title="Storage Efficiency" icon="database">
+    Only store essential data to keep plugin storage lightweight.
+
+    ```typescript
+    // Good: store only what's needed
+    ctx.storage.set('token', tokenString);
+
+    // Bad: store entire response
+    ctx.storage.set('last_response', ctx.response);
+    ```
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Plugin SDK Reference" icon="code" href="/plugins/plugin-sdk">
+    Dive deep into the complete SDK API documentation.
+  </Card>
+  
+  <Card title="Plugin Overview" icon="book" href="/plugins/overview">
+    Learn about plugin architecture and security.
+  </Card>
+</CardGroup>

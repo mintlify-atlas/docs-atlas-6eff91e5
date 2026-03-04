@@ -1,0 +1,556 @@
+---
+title: Environments
+description: Manage environment variables to configure requests for different contexts (dev, staging, production)
+---
+
+## Overview
+
+Environments in Eru allow you to define sets of variables that can be used across all your requests. This is essential for managing different configurations like API base URLs, authentication tokens, and other context-specific values.
+
+<Info>
+Environments are stored as JSON files in `~/.api-client/data/environments/` with automatic persistence.
+</Info>
+
+## Environment Structure
+
+Each environment consists of key-value pairs:
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the environment (auto-generated UUID)
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Display name of the environment (e.g., "Development", "Production")
+</ParamField>
+
+<ParamField path="variables" type="Record<string, string>" required>
+  Key-value pairs of environment variables
+</ParamField>
+
+### Example Environment JSON
+
+```json
+{
+  "id": "dev-env-550e8400",
+  "name": "Development",
+  "variables": {
+    "baseUrl": "https://api.dev.example.com",
+    "apiKey": "dev_1234567890abcdef",
+    "timeout": "30000",
+    "userId": "test-user-123"
+  }
+}
+```
+
+## Creating Environments
+
+<Steps>
+  <Step title="Open Environments Tab">
+    Navigate to the Environments tab in the sidebar (shortcut: `Cmd+2` or `Ctrl+2`)
+  </Step>
+  
+  <Step title="Create New Environment">
+    Click **+ New Environment** button
+  </Step>
+  
+  <Step title="Name Your Environment">
+    Choose a descriptive name:
+    - **Development** - Local development server
+    - **Staging** - Pre-production testing
+    - **Production** - Live production API
+    - **Testing** - Automated test environment
+  </Step>
+  
+  <Step title="Add Variables">
+    Add key-value pairs for your configuration:
+    ```
+    baseUrl = https://api.example.com
+    apiKey = your-api-key-here
+    version = v2
+    ```
+  </Step>
+</Steps>
+
+## Using Variables in Requests
+
+Reference environment variables using the `{{variableName}}` syntax:
+
+<Tabs>
+  <Tab title="URL">
+    ```
+    {{baseUrl}}/users/{{userId}}
+    ```
+    
+    With `baseUrl = https://api.example.com` and `userId = 123`:  
+    Resolves to: `https://api.example.com/users/123`
+  </Tab>
+  
+  <Tab title="Headers">
+    ```json
+    {
+      "Authorization": "Bearer {{authToken}}",
+      "X-API-Key": "{{apiKey}}",
+      "X-Environment": "{{envName}}"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Body">
+    ```json
+    {
+      "user_id": "{{userId}}",
+      "api_endpoint": "{{baseUrl}}/webhook",
+      "timeout": {{timeout}}
+    }
+    ```
+    
+    <Warning>
+    Variables in JSON bodies are auto-quoted for strings but inserted raw for valid JSON values (numbers, booleans, null, objects, arrays).
+    </Warning>
+  </Tab>
+  
+  <Tab title="Authentication">
+    ```json
+    {
+      "type": "bearer",
+      "token": "{{authToken}}"
+    }
+    ```
+    
+    Or for API Key authentication:
+    ```json
+    {
+      "type": "apikey",
+      "apiKeyName": "X-API-Key",
+      "apiKeyValue": "{{apiKey}}",
+      "apiKeyLocation": "header"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Switching Environments
+
+Eru allows you to quickly switch between environments:
+
+<CardGroup cols={2}>
+  <Card title="Sidebar Dropdown" icon="list">
+    Select the active environment from the dropdown at the top of the sidebar. All requests will use variables from the selected environment.
+  </Card>
+  
+  <Card title="Keyboard Shortcut" icon="keyboard">
+    Use `Cmd+E` (Mac) or `Ctrl+E` (Windows/Linux) to open the environment switcher.
+  </Card>
+</CardGroup>
+
+### Active Environment State
+
+The active environment is persisted across sessions:
+
+```typescript
+// From: apps/desktop/ui/src/stores/types.ts:52-60
+export interface AppState {
+  lastEnvironmentId: string | null;
+  lastRequestId: string | null;
+  sidebarTab: SidebarTab;
+  editorTab: EditorTab;
+  requestPanelHeight: number;
+  sidebarWidth: number;
+  openTabs: OpenTab[];
+}
+```
+
+## Variable Interpolation
+
+Eru's engine interpolates variables at request execution time:
+
+```go
+// From workflow implementation showing interpolation
+func interpolateVariables(
+  text string,
+  variables Map<string, string>
+) string {
+  return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+    const value = variables.get(varName.trim());
+    return value !== undefined ? value : match;
+  });
+}
+```
+
+### JSON-Aware Interpolation
+
+For JSON request bodies, Eru uses smart interpolation:
+
+```typescript
+// From: apps/desktop/ui/src/components/WorkflowEditor.tsx:85-102
+function interpolateVariablesJson(
+  text: string,
+  variables: Map<string, string>
+): string {
+  return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+    const value = variables.get(varName.trim());
+    if (value === undefined) return match;
+
+    // If value is already valid JSON (number, boolean, null, object, array), use as-is
+    try {
+      JSON.parse(value);
+      return value;
+    } catch {
+      // Not valid JSON, treat as raw string and JSON-stringify it
+      return JSON.stringify(value);
+    }
+  });
+}
+```
+
+**Examples:**
+
+<CodeGroup>
+```json Input
+{
+  "username": "{{username}}",
+  "age": {{age}},
+  "active": {{isActive}},
+  "metadata": {{metadataObject}}
+}
+```
+
+```json Variables
+{
+  "username": "john_doe",
+  "age": "25",
+  "isActive": "true",
+  "metadataObject": "{\"key\": \"value\"}"
+}
+```
+
+```json Output
+{
+  "username": "john_doe",
+  "age": 25,
+  "active": true,
+  "metadata": {"key": "value"}
+}
+```
+</CodeGroup>
+
+## Storage Implementation
+
+Environments use the same file-based storage as collections:
+
+```go
+// From: apps/desktop/core/internal/storage/storage.go:140-159
+func (s *fileStore) ListEnvironments() ([]types.Environment, error) {
+    pattern := filepath.Join(s.basePath, "environments", "*.json")
+    files, _ := filepath.Glob(pattern)
+    
+    envs := make([]types.Environment, 0)
+    for _, f := range files {
+        data, err := os.ReadFile(f)
+        if err != nil {
+            continue
+        }
+        var env types.Environment
+        if err := json.Unmarshal(data, &env); err == nil {
+            envs = append(envs, env)
+        }
+    }
+    return envs, nil
+}
+```
+
+<Info>
+**Storage Location**: `~/.api-client/data/environments/`  
+**File Format**: JSON with pretty printing (2-space indent)  
+**Filename**: `{environment-id}.json`
+</Info>
+
+## Importing Environments
+
+### Postman Environments
+
+Eru supports importing Postman environment files:
+
+<Steps>
+  <Step title="Export from Postman">
+    In Postman, select your environment → **Export** → Save as `.json`
+  </Step>
+  
+  <Step title="Import to Eru">
+    In Eru, click **File** → **Import Environment** → Select your environment file
+  </Step>
+  
+  <Step title="Review Variables">
+    Eru automatically:
+    - Imports all enabled variables
+    - Preserves variable names and values
+    - Generates a new UUID if needed
+    - Skips disabled variables
+  </Step>
+</Steps>
+
+**Import Implementation:**
+
+```go
+// From: apps/desktop/core/internal/importer/importer.go:132-160
+func (i *importer) ImportEnvironment(filePath string) (*types.Environment, error) {
+    data, err := os.ReadFile(filePath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read file: %w", err)
+    }
+
+    var pe PostmanEnvironment
+    if err := json.Unmarshal(data, &pe); err != nil {
+        return nil, fmt.Errorf("failed to parse Postman environment: %w", err)
+    }
+
+    variables := make(map[string]string)
+    for _, v := range pe.Values {
+        if v.Enabled {
+            variables[v.Key] = v.Value
+        }
+    }
+
+    envID := pe.ID
+    if envID == "" {
+        envID = uuid.New().String()
+    }
+
+    return &types.Environment{
+        ID:        envID,
+        Name:      pe.Name,
+        Variables: variables,
+    }, nil
+}
+```
+
+## Environment API Reference
+
+All environment operations are exposed via JSON-RPC:
+
+### List Environments
+
+```typescript
+const environments = await ipc.call("environment.list");
+// Returns: Environment[]
+```
+
+### Get Environment
+
+```typescript
+const env = await ipc.call("environment.get", { 
+  id: "env-id" 
+});
+// Returns: Environment | null
+```
+
+### Save Environment
+
+```typescript
+await ipc.call("environment.save", {
+  id: "env-id",
+  name: "Production",
+  variables: {
+    baseUrl: "https://api.prod.example.com",
+    apiKey: "prod_key_xyz"
+  }
+});
+```
+
+### Delete Environment
+
+```typescript
+await ipc.call("environment.delete", { 
+  id: "env-id" 
+});
+```
+
+## Advanced Use Cases
+
+### Multi-Region Configuration
+
+Manage different API regions with environments:
+
+<Accordion title="US Region">
+  ```json
+  {
+    "id": "us-region",
+    "name": "US Production",
+    "variables": {
+      "baseUrl": "https://us-api.example.com",
+      "region": "us-east-1",
+      "cdnUrl": "https://cdn-us.example.com"
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="EU Region">
+  ```json
+  {
+    "id": "eu-region",
+    "name": "EU Production",
+    "variables": {
+      "baseUrl": "https://eu-api.example.com",
+      "region": "eu-west-1",
+      "cdnUrl": "https://cdn-eu.example.com"
+    }
+  }
+  ```
+</Accordion>
+
+### Dynamic Token Management
+
+Combine environments with workflow variables for dynamic authentication:
+
+```typescript
+// Login request extracts token
+workflow.steps[0].extractVariables = [
+  { name: "token", jsonPath: "$.access_token" }
+];
+
+// Subsequent requests use the extracted token
+// URL: {{baseUrl}}/api/user
+// Header: Authorization: Bearer {{Login.token}}
+```
+
+<Tip>
+**Workflow variables** (from chained requests) take precedence over environment variables when both have the same name.
+</Tip>
+
+### Environment-Specific Timeouts
+
+```json
+{
+  "Development": {
+    "timeout": "60000",
+    "retries": "3"
+  },
+  "Production": {
+    "timeout": "30000",
+    "retries": "1"
+  }
+}
+```
+
+Use in requests:
+```typescript
+// Note: Timeout is configured at engine level
+// But you can use variables for request-specific logic
+```
+
+## Variable Resolution Order
+
+Eru resolves variables in this priority order:
+
+<Steps>
+  <Step title="Workflow Variables" icon="1">
+    Variables extracted from previous workflow steps (highest priority)
+    
+    Example: `{{Login.token}}`
+  </Step>
+  
+  <Step title="Environment Variables" icon="2">
+    Variables from the active environment
+    
+    Example: `{{baseUrl}}`
+  </Step>
+  
+  <Step title="Undefined" icon="3">
+    If not found, the variable placeholder remains as-is
+    
+    Example: `{{unknownVar}}` → stays as `{{unknownVar}}`
+  </Step>
+</Steps>
+
+### Variable Information UI
+
+```typescript
+// From: apps/desktop/ui/src/stores/types.ts:95-101
+export interface VariableInfo {
+  name: string;
+  value: string;
+  source: 'chain' | 'environment' | 'undefined';
+  environmentName?: string;
+}
+```
+
+The UI shows where each variable comes from, making debugging easier.
+
+## Security Best Practices
+
+<Warning>
+**Never commit sensitive credentials to version control!** Environment files contain plaintext values.
+</Warning>
+
+### Recommended Approach
+
+<Steps>
+  <Step title="Use Separate Environments">
+    Keep separate environments for different security levels:
+    - **Local Dev**: Use dummy/test credentials
+    - **Staging**: Use staging credentials (separate from production)
+    - **Production**: Use production credentials (limit access)
+  </Step>
+  
+  <Step title="Git Ignore">
+    Add to `.gitignore` if syncing with Git:
+    ```
+    # Eru environment files with secrets
+    environments/production.json
+    environments/staging.json
+    ```
+  </Step>
+  
+  <Step title="Use Secret Management">
+    For production environments, consider:
+    - External secret managers (AWS Secrets Manager, HashiCorp Vault)
+    - CI/CD injection of secrets
+    - Local-only environment files (not synced)
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<Accordion title="Variables not being replaced">
+  Check:
+  1. Environment is selected (dropdown shows active environment)
+  2. Variable name matches exactly (case-sensitive)
+  3. Syntax is correct: `{{variableName}}` not `{variableName}`
+  4. No extra spaces: `{{var}}` not `{{ var }}`
+</Accordion>
+
+<Accordion title="Wrong variable value used">
+  Check variable resolution order:
+  1. Are you using workflow variables that override environment variables?
+  2. Is the correct environment selected?
+  3. Check the variable preview in the request editor
+</Accordion>
+
+<Accordion title="Environment changes not saving">
+  Ensure:
+  - Write permissions for `~/.api-client/data/environments/`
+  - Disk space is available
+  - No file system errors in console logs
+  - Environment ID is not empty
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Requests" icon="paper-plane" href="/features/requests">
+    Use environment variables in your requests
+  </Card>
+  
+  <Card title="Workflows" icon="diagram-project" href="/features/workflows">
+    Chain requests and extract variables dynamically
+  </Card>
+  
+  <Card title="Git Sync" icon="code-branch" href="/integrations/git-sync">
+    Sync environments across your team (with caution for secrets)
+  </Card>
+  
+  <Card title="Collections" icon="folder" href="/features/collections">
+    Organize requests that use environment variables
+  </Card>
+</CardGroup>

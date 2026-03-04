@@ -1,0 +1,438 @@
+---
+title: Collections
+description: Organize and manage your API requests with collections and nested folders
+---
+
+## Overview
+
+Collections in Eru provide a powerful way to organize your API requests into logical groups. Think of collections as folders that can contain requests and even other collections, allowing you to build a hierarchical structure that mirrors your API architecture.
+
+<Info>
+Collections are stored as JSON files in `~/.api-client/data/collections/` with automatic persistence.
+</Info>
+
+## Collection Structure
+
+Each collection in Eru has the following properties:
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the collection (auto-generated UUID)
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Display name of the collection
+</ParamField>
+
+<ParamField path="parentId" type="string">
+  Parent collection ID for nested folders. Empty string for root collections.
+</ParamField>
+
+<ParamField path="requests" type="string[]">
+  Array of request IDs belonging to this collection
+</ParamField>
+
+<ParamField path="description" type="string">
+  Markdown documentation for the collection
+</ParamField>
+
+### Example Collection JSON
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "User API",
+  "parentId": "",
+  "requests": [
+    "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "3f333df6-90a4-4fda-8dd3-9485d27cee36"
+  ],
+  "description": "# User Management API\n\nEndpoints for user CRUD operations"
+}
+```
+
+## Creating Collections
+
+<Steps>
+  <Step title="Open Collections Tab">
+    Navigate to the Collections tab in the sidebar (shortcut: `Cmd+1` or `Ctrl+1`)
+  </Step>
+  
+  <Step title="Create New Collection">
+    Click the **+ New Collection** button or use the keyboard shortcut `Cmd+Shift+N` (Mac) or `Ctrl+Shift+N` (Windows/Linux)
+  </Step>
+  
+  <Step title="Name Your Collection">
+    Enter a descriptive name for your collection (e.g., "Authentication API", "User Endpoints")
+  </Step>
+  
+  <Step title="Add Requests">
+    Drag and drop existing requests into the collection, or create new requests directly within it
+  </Step>
+</Steps>
+
+## Nested Collections (Folders)
+
+Eru supports unlimited nesting of collections, allowing you to create complex organizational structures:
+
+```
+E-commerce API
+├── Authentication
+│   ├── Login
+│   ├── Logout
+│   └── Refresh Token
+├── Products
+│   ├── List Products
+│   ├── Get Product Details
+│   └── Admin
+│       ├── Create Product
+│       ├── Update Product
+│       └── Delete Product
+└── Orders
+    ├── Create Order
+    ├── Get Order Status
+    └── Cancel Order
+```
+
+### Creating Nested Folders
+
+<CodeGroup>
+```typescript UI Example
+// Collections are automatically organized in the UI
+// Right-click a collection → "New Subfolder"
+```
+
+```go Backend Storage
+// Child collection references parent
+folder := types.Collection{
+    ID:       uuid.New().String(),
+    Name:     "Admin",
+    ParentID: "products-collection-id", // Links to parent
+    Requests: []string{},
+}
+```
+</CodeGroup>
+
+## Managing Collections
+
+### Rename Collection
+
+Double-click the collection name in the sidebar and type a new name. Changes are saved automatically.
+
+### Move Requests Between Collections
+
+Drag requests between collections in the sidebar. The backend automatically updates both the old and new collection's request arrays:
+
+```go
+// From: apps/desktop/core/cmd/apicore/main.go:227-275
+if oldCollectionID != "" && oldCollectionID != req.CollectionID {
+    // Remove from old collection
+    oldCol, err := app.storage.GetCollection(oldCollectionID)
+    if err == nil && oldCol != nil {
+        newRequests := make([]string, 0)
+        for _, rid := range oldCol.Requests {
+            if rid != req.ID {
+                newRequests = append(newRequests, rid)
+            }
+        }
+        oldCol.Requests = newRequests
+        app.storage.SaveCollection(oldCol)
+    }
+}
+```
+
+### Delete Collection
+
+<Warning>
+Deleting a collection does **not** delete the requests inside it. Requests become orphaned and can be accessed from the "All Requests" view.
+</Warning>
+
+Right-click a collection and select **Delete** to remove it.
+
+## Storage Implementation
+
+Collections are persisted using a file-based storage system:
+
+```go
+// From: apps/desktop/core/internal/storage/storage.go:73-92
+func (s *fileStore) ListCollections() ([]types.Collection, error) {
+    pattern := filepath.Join(s.basePath, "collections", "*.json")
+    files, _ := filepath.Glob(pattern)
+    
+    collections := make([]types.Collection, 0)
+    for _, f := range files {
+        data, err := os.ReadFile(f)
+        if err != nil {
+            continue
+        }
+        var col types.Collection
+        if err := json.Unmarshal(data, &col); err == nil {
+            collections = append(collections, col)
+        }
+    }
+    return collections, nil
+}
+```
+
+<Info>
+**Storage Location**: `~/.api-client/data/collections/`  
+**File Format**: JSON with pretty printing (2-space indent)  
+**Filename**: `{collection-id}.json`
+</Info>
+
+## Importing Collections
+
+Eru supports importing collections from popular API tools:
+
+<Tabs>
+  <Tab title="Postman">
+    ### Import Postman Collections
+    
+    Eru supports Postman Collection v2.x format:
+    
+    <Steps>
+      <Step title="Export from Postman">
+        In Postman, select your collection → **Export** → **Collection v2.1**
+      </Step>
+      
+      <Step title="Import to Eru">
+        In Eru, click **File** → **Import Collection** → Select your `.json` file
+      </Step>
+      
+      <Step title="Review Import">
+        Eru automatically:
+        - Creates a root collection
+        - Converts folders to nested collections
+        - Imports all requests with headers, body, and auth
+        - Shows warnings for unsupported features
+      </Step>
+    </Steps>
+    
+    **What's Imported:**
+    - ✅ Requests (GET, POST, PUT, PATCH, DELETE)
+    - ✅ Headers
+    - ✅ Request bodies (JSON, form-urlencoded, raw)
+    - ✅ Folder structure (as nested collections)
+    - ✅ Basic authentication
+    - ⚠️ Form-data (converted to urlencoded, file uploads may be lost)
+    
+    ```go
+    // Detection logic from: apps/desktop/core/internal/importer/importer.go:66-74
+    if info, ok := raw["info"].(map[string]interface{}); ok {
+        if schema, ok := info["schema"].(string); ok {
+            if strings.Contains(schema, "postman") {
+                return "postman_v2", nil
+            }
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Insomnia">
+    ### Insomnia Support
+    
+    <Note>
+    Insomnia import is planned for a future release. Currently in development.
+    </Note>
+  </Tab>
+  
+  <Tab title="OpenAPI">
+    ### OpenAPI/Swagger Support
+    
+    <Note>
+    OpenAPI import is planned for a future release. You can convert OpenAPI specs to Postman format as a workaround.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Exporting Collections
+
+Export your collections to share with team members or migrate to other tools:
+
+<CardGroup cols={2}>
+  <Card title="Eru Native Format" icon="file-code">
+    ```json
+    {
+      "version": "1.0",
+      "collections": [...],
+      "requests": [...],
+      "environments": [...]
+    }
+    ```
+    
+    Complete export including all nested collections, requests, and environments.
+  </Card>
+  
+  <Card title="Postman v2.1" icon="download">
+    ```json
+    {
+      "info": {
+        "name": "My Collection",
+        "schema": "https://schema.getpostman.com/..."
+      },
+      "item": [...]
+    }
+    ```
+    
+    Export to Postman-compatible format for easy migration.
+  </Card>
+</CardGroup>
+
+### Export via RPC
+
+```typescript
+// Export a collection programmatically
+await ipc.call("export.collection", {
+  id: "collection-id",
+  format: "postman", // or "eru"
+  filePath: "/path/to/export.json"
+});
+```
+
+**Implementation Details:**
+
+```go
+// From: apps/desktop/core/internal/exporter/exporter.go:24-33
+func (e *Exporter) ExportCollection(id, format, filePath string) error {
+    switch format {
+    case "eru":
+        return e.exportEru(id, filePath)
+    case "postman":
+        return e.exportPostmanV2(id, filePath)
+    default:
+        return fmt.Errorf("unsupported export format: %s", format)
+    }
+}
+```
+
+## Collection API Reference
+
+All collection operations are exposed via JSON-RPC:
+
+### List Collections
+
+```typescript
+const collections = await ipc.call("collection.list");
+// Returns: Collection[]
+```
+
+### Get Collection
+
+```typescript
+const collection = await ipc.call("collection.get", { 
+  id: "collection-id" 
+});
+// Returns: Collection | null
+```
+
+### Save Collection
+
+```typescript
+await ipc.call("collection.save", {
+  id: "collection-id",
+  name: "Updated Name",
+  parentId: "",
+  requests: ["req-1", "req-2"],
+  description: "# My Collection\n\nDescriptive text"
+});
+```
+
+### Delete Collection
+
+```typescript
+await ipc.call("collection.delete", { 
+  id: "collection-id" 
+});
+```
+
+<Tip>
+**Best Practice**: Always check for errors when working with collections. The RPC layer returns detailed error messages for debugging.
+</Tip>
+
+## Advanced Features
+
+### Collection Documentation
+
+Add rich Markdown documentation to collections:
+
+```markdown
+# User Authentication API
+
+## Overview
+This collection contains all authentication-related endpoints.
+
+## Authentication
+All requests require a Bearer token in the `Authorization` header.
+
+## Rate Limits
+- 100 requests per minute
+- 1000 requests per hour
+```
+
+The `description` field supports full Markdown syntax including:
+- Headers and formatting
+- Code blocks
+- Lists and tables
+- Links and images
+
+### Bulk Operations
+
+Process multiple collections efficiently:
+
+```typescript
+const allCollections = await ipc.call("collection.list");
+
+for (const collection of allCollections) {
+  if (collection.parentId === targetParentId) {
+    // Move all child collections
+    await ipc.call("collection.save", {
+      ...collection,
+      parentId: newParentId
+    });
+  }
+}
+```
+
+## Troubleshooting
+
+<Accordion title="Collections not appearing after import">
+  Check the console for import warnings. Some collection formats may have compatibility issues. Try:
+  1. Re-exporting from the source tool
+  2. Validating the JSON structure
+  3. Checking file permissions in `~/.api-client/data/collections/`
+</Accordion>
+
+<Accordion title="Orphaned requests after deleting collection">
+  Requests are not automatically deleted when a collection is removed. To find orphaned requests:
+  1. Go to the "All Requests" view
+  2. Filter by `collectionId: ""` (empty string)
+  3. Manually delete or re-assign to a new collection
+</Accordion>
+
+<Accordion title="Collection changes not persisting">
+  Ensure:
+  - Write permissions for `~/.api-client/data/`
+  - Disk space is available
+  - No file system errors in the console logs
+  
+  Check storage logs at: `stderr` (logs are written to `os.Stderr`)
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Requests" icon="paper-plane" href="/features/requests">
+    Learn how to create and execute requests within collections
+  </Card>
+  
+  <Card title="Environments" icon="globe" href="/features/environments">
+    Use environment variables across collections
+  </Card>
+  
+  <Card title="Workflows" icon="diagram-project" href="/features/workflows">
+    Chain requests from multiple collections
+  </Card>
+  
+  <Card title="Git Sync" icon="code-branch" href="/integrations/git-sync">
+    Version control your collections with Git
+  </Card>
+</CardGroup>

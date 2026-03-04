@@ -1,0 +1,421 @@
+---
+title: Git Sync
+description: Synchronize your API collections, requests, and environments with Git repositories for version control and team collaboration
+---
+
+## Overview
+
+Git Sync enables you to store your API collections, requests, and environments in a Git repository. This provides version control, team collaboration, and the ability to sync your work across multiple machines.
+
+<CardGroup cols={2}>
+  <Card title="Version Control" icon="code-branch">
+    Track changes to your API definitions over time
+  </Card>
+  <Card title="Team Collaboration" icon="users">
+    Share collections with your team via Git
+  </Card>
+  <Card title="Multi-Machine Sync" icon="sync">
+    Keep your work synchronized across devices
+  </Card>
+  <Card title="Backup & Recovery" icon="cloud-arrow-up">
+    Automatic backup of your API definitions
+  </Card>
+</CardGroup>
+
+## How It Works
+
+Eru exports your collections, requests, and environments as JSON files in a `.api-collections/` directory within your Git repository:
+
+```
+my-repo/
+├── .api-collections/
+│   ├── collections/
+│   │   ├── users-api.json
+│   │   └── payments-api.json
+│   ├── requests/
+│   │   ├── req-abc123.json
+│   │   └── req-def456.json
+│   ├── environments/
+│   │   ├── development.json
+│   │   └── production.json
+│   └── .gitignore
+└── ...
+```
+
+## Getting Started
+
+<Steps>
+  <Step title="Initialize or Clone Repository">
+    You can either initialize a new Git repository or clone an existing one.
+    
+    <Tabs>
+      <Tab title="Initialize New">
+        ```go
+        manager := gitsync.NewManager("/path/to/data")
+        err := manager.Init("/path/to/repo")
+        ```
+      </Tab>
+      <Tab title="Clone Existing">
+        ```go
+        err := manager.Clone(
+            "git@github.com:yourorg/api-collections.git",
+            "/path/to/local/repo"
+        )
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  
+  <Step title="Configure Sync Settings">
+    Set up your sync configuration:
+    
+    ```go
+    config := &gitsync.Config{
+        Provider:   "git",
+        RepoPath:   "/path/to/repo",
+        RemoteName: "origin",
+        Branch:     "main",
+        AutoSync:   true,
+    }
+    err := manager.SetConfig(config)
+    ```
+  </Step>
+  
+  <Step title="Export Data to Repository">
+    Export your collections, requests, and environments:
+    
+    ```go
+    err := manager.ExportToRepo(collections, requests, environments)
+    ```
+  </Step>
+  
+  <Step title="Push Changes">
+    Commit and push your changes to the remote:
+    
+    ```go
+    status, err := manager.Push()
+    if err != nil {
+        log.Fatal(err)
+    }
+    ```
+  </Step>
+</Steps>
+
+## SSH Authentication Setup
+
+Git Sync supports SSH key-based authentication for secure access to remote repositories.
+
+### SSH Key Configuration
+
+<Warning>
+**Linux Desktop Launch Considerations**
+
+When Eru is launched from a `.desktop` file, SSH environment variables may not be available. Eru automatically handles this by:
+- Searching for SSH agent sockets in common locations
+- Using SSH keys directly if no agent is found
+- Setting up GUI passphrase prompts for protected keys
+</Warning>
+
+<Tabs>
+  <Tab title="Using SSH Agent">
+    Eru automatically detects SSH agent sockets in these locations:
+    
+    - `/run/user/{uid}/ssh-agent.socket` (systemd)
+    - `/run/user/{uid}/keyring/ssh` (GNOME Keyring)
+    - `/run/user/{uid}/gnome-keyring-daemon/ssh` (GNOME)
+    - `/run/user/{uid}/gcr/ssh` (GNOME GCR)
+    - `/run/user/{uid}/openssh_agent` (KDE Plasma)
+    - `/run/user/{uid}/gnupg/S.gpg-agent.ssh` (gpg-agent)
+    
+    Source: `apps/desktop/core/internal/gitsync/gitsync.go:42-64`
+  </Tab>
+  
+  <Tab title="Direct Key Usage">
+    If no SSH agent is found, Eru uses your SSH key directly:
+    
+    ```bash
+    # Default key locations checked:
+    ~/.ssh/id_ed25519
+    ~/.ssh/id_rsa
+    ```
+    
+    The key is used with these SSH options:
+    - `IdentitiesOnly=yes` - Only use specified key
+    - `ConnectTimeout=30` - Prevent hanging
+    - `StrictHostKeyChecking=accept-new` - Auto-add new hosts
+  </Tab>
+  
+  <Tab title="Passphrase-Protected Keys">
+    For passphrase-protected keys, Eru sets up GUI prompts using:
+    
+    - `/usr/bin/ssh-askpass`
+    - `/usr/lib/openssh/gnome-ssh-askpass`
+    - `/usr/bin/ksshaskpass` (KDE)
+    - `/usr/lib/seahorse/ssh-askpass` (GNOME)
+    - `/usr/bin/lxqt-openssh-askpass` (LXQt)
+    
+    Source: `apps/desktop/core/internal/gitsync/gitsync.go:123-140`
+  </Tab>
+</Tabs>
+
+### Testing SSH Connection
+
+```go
+result, err := manager.TestSSH()
+if result.Success {
+    fmt.Println("SSH connection successful")
+    fmt.Println(result.Output)
+} else {
+    fmt.Println("SSH connection failed:")
+    fmt.Println(result.Output)
+}
+```
+
+## Git Operations
+
+### Pull (Fetch Remote Changes)
+
+Pull the latest changes from the remote repository:
+
+```go
+status, err := manager.Pull()
+if err != nil {
+    if strings.Contains(err.Error(), "merge conflicts") {
+        // Handle conflicts
+        fmt.Println("Conflicts detected:")
+        for _, conflict := range status.Conflicts {
+            fmt.Println("-", conflict)
+        }
+    }
+}
+```
+
+<Note>
+Pull uses `--no-rebase` merge strategy to handle divergent branches without requiring user git config.
+</Note>
+
+### Push (Upload Local Changes)
+
+Commit and push local changes to remote:
+
+```go
+status, err := manager.Push()
+if err != nil {
+    if strings.Contains(err.Error(), "pull first") {
+        // Remote has changes, need to pull first
+        manager.Pull()
+    }
+}
+```
+
+The push operation:
+1. Stages all changes with `git add -A`
+2. Creates a commit with timestamp: `Sync collections - 2024-01-15 14:30:00`
+3. Pushes to configured remote and branch
+
+### Pull and Push (Sync)
+
+Perform a complete sync operation:
+
+```go
+status, err := manager.PullAndPush()
+if err != nil {
+    log.Printf("Sync failed: %v", err)
+}
+```
+
+This operation:
+1. Fetches remote changes
+2. Pulls with merge strategy
+3. Stages and commits local changes
+4. Pushes to remote
+
+### Force Push
+
+<Warning>
+Use force push with caution. It overwrites remote history.
+</Warning>
+
+```go
+status, err := manager.ForcePush()
+```
+
+Uses `--force-with-lease` for safer force pushing (fails if remote was updated).
+
+## Status Monitoring
+
+Get the current sync status:
+
+```go
+status := manager.Status()
+
+fmt.Printf("Connected: %v\n", status.Connected)
+fmt.Printf("Branch: %s\n", status.Branch)
+fmt.Printf("Ahead: %d commits\n", status.Ahead)
+fmt.Printf("Behind: %d commits\n", status.Behind)
+fmt.Printf("Has uncommitted changes: %v\n", status.HasChanges)
+fmt.Printf("Last sync: %s\n", status.LastSyncText)
+```
+
+### Status Fields
+
+```go
+type Status struct {
+    Connected    bool     // Repository is configured
+    Provider     string   // "git" or "none"
+    Branch       string   // Current branch
+    Ahead        int      // Commits ahead of remote
+    Behind       int      // Commits behind remote
+    HasChanges   bool     // Uncommitted local changes
+    LastSync     int64    // Unix timestamp
+    LastSyncText string   // Human-readable ("5 minutes ago")
+    Conflicts    []string // List of conflicted files
+    Error        string   // Error message if any
+}
+```
+
+## Data Import/Export
+
+### Export to Repository
+
+Export your data to the Git repository:
+
+```go
+err := manager.ExportToRepo(collections, requests, environments)
+```
+
+This creates JSON files in the `.api-collections/` directory with sanitized filenames.
+
+### Import from Repository
+
+Import data from the Git repository:
+
+```go
+collections, requests, environments, err := manager.ImportFromRepo()
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Imported %d collections\n", len(collections))
+fmt.Printf("Imported %d requests\n", len(requests))
+fmt.Printf("Imported %d environments\n", len(environments))
+```
+
+## Conflict Resolution
+
+When merge conflicts occur during pull:
+
+1. The pull operation returns an error with `"merge conflicts detected"`
+2. Check `status.Conflicts` for list of conflicted files
+3. Resolve conflicts manually in the repository
+4. Commit the resolution
+5. Try the pull operation again
+
+<Info>
+For complex conflicts, it's recommended to use a Git GUI client or command line to resolve issues manually.
+</Info>
+
+## Auto-Sync
+
+Enable automatic syncing when data changes:
+
+```go
+config := manager.GetConfig()
+config.AutoSync = true
+manager.SetConfig(config)
+```
+
+When enabled, changes are automatically committed and pushed after data modifications.
+
+## Security Best Practices
+
+<Steps>
+  <Step title="Use SSH Keys">
+    Prefer SSH over HTTPS for secure authentication without storing passwords
+  </Step>
+  
+  <Step title="Protect Sensitive Data">
+    Add patterns to `.api-collections/.gitignore` for sensitive files:
+    
+    ```gitignore
+    # Ignore production secrets
+    environments/production.json
+    
+    # Ignore files with secrets
+    *.secret.json
+    ```
+  </Step>
+  
+  <Step title="Review Before Push">
+    Always review changes before pushing to ensure no secrets are committed
+  </Step>
+  
+  <Step title="Use Environment Variables">
+    Store sensitive values in Eru environment variables, not in request bodies
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<Accordion title="Authentication failed">
+  **Symptoms**: `Permission denied` or `authentication failed` errors
+  
+  **Solutions**:
+  - Verify SSH keys are set up: `ls -la ~/.ssh/`
+  - Test SSH connection: `ssh -T git@github.com`
+  - Check SSH agent is running: `echo $SSH_AUTH_SOCK`
+  - For GUI launch issues, ensure ssh-askpass is installed
+  - Try using HTTPS URL instead of SSH
+</Accordion>
+
+<Accordion title="Remote has changes - pull first">
+  **Symptoms**: Push fails with `non-fast-forward` error
+  
+  **Solutions**:
+  - Pull first: `manager.Pull()`
+  - Or use sync operation: `manager.PullAndPush()`
+  - If intentional, use force push (with caution)
+</Accordion>
+
+<Accordion title="Merge conflicts detected">
+  **Symptoms**: Pull fails with conflicts
+  
+  **Solutions**:
+  - Navigate to repository directory
+  - Check conflicted files: `git status`
+  - Resolve conflicts manually
+  - Commit resolution: `git add . && git commit`
+  - Try pull again
+</Accordion>
+
+<Accordion title="Git user identity not set">
+  **Symptoms**: Commit fails with `unable to auto-detect email address`
+  
+  **Solutions**:
+  Eru automatically sets fallback git user identity:
+  - Name: `API Client Sync`
+  - Email: `sync@localhost`
+  
+  Or configure git globally:
+  ```bash
+  git config --global user.name "Your Name"
+  git config --global user.email "your@email.com"
+  ```
+  
+  Source: `apps/desktop/core/internal/gitsync/gitsync.go:162-178`
+</Accordion>
+
+## Configuration Reference
+
+```go
+type Config struct {
+    Provider   string // "git" or "none"
+    RepoPath   string // Local repository path
+    RemoteName string // Git remote name (usually "origin")
+    Branch     string // Branch to sync (e.g., "main")
+    AutoSync   bool   // Automatically sync on changes
+    LastSync   int64  // Unix timestamp of last sync
+}
+```
+
+Configuration is stored in `sync_config.json` in the data directory.

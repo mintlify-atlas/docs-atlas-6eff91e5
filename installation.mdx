@@ -1,0 +1,372 @@
+---
+title: Installation
+description: Download and install Eru API Client on macOS, Windows, or Linux
+---
+
+## System Requirements
+
+<Tabs>
+  <Tab title="macOS">
+    - **OS**: macOS 10.15 (Catalina) or later
+    - **Architecture**: Intel (x64) or Apple Silicon (M1/M2/M3)
+    - **RAM**: 4GB minimum (8GB recommended)
+    - **Disk Space**: 50MB for application
+  </Tab>
+  <Tab title="Windows">
+    - **OS**: Windows 10 (build 1803) or later
+    - **Architecture**: x86_64 (64-bit)
+    - **RAM**: 4GB minimum (8GB recommended)
+    - **Disk Space**: 50MB for application
+  </Tab>
+  <Tab title="Linux">
+    - **OS**: Ubuntu 18.04+, Debian 10+, Fedora 32+, or equivalent
+    - **Architecture**: x86_64 (amd64)
+    - **RAM**: 4GB minimum (8GB recommended)
+    - **Disk Space**: 50MB for application
+    - **Dependencies**: `webkit2gtk-4.0`, `libgtk-3-0`
+  </Tab>
+</Tabs>
+
+## Download Eru
+
+<CardGroup cols={3}>
+  <Card title="macOS (Apple Silicon)" icon="apple">
+    For M1/M2/M3 Macs
+    
+    [Download .dmg](https://github.com/royalbhati/eru/releases/latest/download/Eru_aarch64.dmg)
+  </Card>
+  <Card title="macOS (Intel)" icon="apple">
+    For Intel-based Macs
+    
+    [Download .dmg](https://github.com/royalbhati/eru/releases/latest/download/Eru_x64.dmg)
+  </Card>
+  <Card title="Windows" icon="windows">
+    x86_64 (64-bit)
+    
+    [Download .msi](https://github.com/royalbhati/eru/releases/latest/download/Eru_x64_en-US.msi)
+    
+    [Download .exe](https://github.com/royalbhati/eru/releases/latest/download/Eru_x64-setup.exe)
+  </Card>
+</CardGroup>
+
+<CardGroup cols={2}>
+  <Card title="Linux (Debian/Ubuntu)" icon="linux">
+    .deb package for apt-based systems
+    
+    [Download .deb](https://github.com/royalbhati/eru/releases/latest/download/Eru_amd64.deb)
+  </Card>
+  <Card title="Linux (AppImage)" icon="linux">
+    Portable AppImage (all distributions)
+    
+    [Download .AppImage](https://github.com/royalbhati/eru/releases/latest/download/Eru_amd64.AppImage)
+  </Card>
+</CardGroup>
+
+## Platform-Specific Installation
+
+<Steps>
+  <Step title="macOS Installation">
+    ### Install from DMG
+    
+    1. Download the appropriate `.dmg` file for your Mac (Apple Silicon or Intel)
+    2. Open the downloaded `.dmg` file
+    3. Drag **Eru.app** to your **Applications** folder
+    4. Eject the DMG
+    
+    ### Bypass macOS Gatekeeper
+    
+    <Warning>
+    Since Eru is not code-signed with an Apple Developer certificate ($99/year), macOS Gatekeeper will block the app on first launch with a message like:
+    
+    **"Eru.app" cannot be opened because the developer cannot be verified.**
+    </Warning>
+    
+    **Method 1: System Settings (Recommended)**
+    
+    1. Try opening Eru normally — macOS will show a security warning
+    2. Open **System Settings → Privacy & Security → Security** (or **System Preferences → Security & Privacy → General** on older macOS)
+    3. You'll see a message: _"Eru.app was blocked from use because it is not from an identified developer"_
+    4. Click **"Open Anyway"**
+    5. Confirm by clicking **"Open"** in the dialog
+    
+    **Method 2: Terminal Command**
+    
+    Remove the quarantine attribute that macOS applies to downloaded files:
+    
+    ```bash
+    xattr -c /Applications/Eru.app
+    ```
+    
+    If Eru still shows as "damaged" or won't open:
+    
+    ```bash
+    # Remove quarantine from all files inside the app bundle
+    find /Applications/Eru.app -exec xattr -c {} \;
+    ```
+    
+    <Tip>
+    These commands are safe and only remove macOS's download quarantine flag. They don't modify the application itself.
+    </Tip>
+  </Step>
+  
+  <Step title="Windows Installation">
+    ### Install from MSI (Recommended)
+    
+    1. Download `Eru_x64_en-US.msi`
+    2. Double-click the MSI file to launch the installer
+    3. Follow the installation wizard
+    4. Eru will be installed to `C:\Program Files\Eru\`
+    5. Launch from Start Menu or Desktop shortcut
+    
+    ### Install from EXE
+    
+    1. Download `Eru_x64-setup.exe`
+    2. Run the executable
+    3. Windows may show a SmartScreen warning ("Windows protected your PC")
+    4. Click **"More info"** → **"Run anyway"**
+    5. Follow the installation wizard
+    
+    <Info>
+    The MSI installer is recommended for enterprise environments as it can be deployed via Group Policy.
+    </Info>
+  </Step>
+  
+  <Step title="Linux Installation">
+    ### Debian/Ubuntu (.deb)
+    
+    ```bash
+    # Download the .deb package
+    wget https://github.com/royalbhati/eru/releases/latest/download/Eru_amd64.deb
+    
+    # Install the package
+    sudo dpkg -i Eru_amd64.deb
+    
+    # Install dependencies if needed
+    sudo apt-get install -f
+    
+    # Launch Eru
+    eru
+    ```
+    
+    ### AppImage (All Distributions)
+    
+    ```bash
+    # Download the AppImage
+    wget https://github.com/royalbhati/eru/releases/latest/download/Eru_amd64.AppImage
+    
+    # Make it executable
+    chmod +x Eru_amd64.AppImage
+    
+    # Run it
+    ./Eru_amd64.AppImage
+    ```
+    
+    <Tip>
+    Move the AppImage to `~/Applications` or `/opt` for easier access:
+    
+    ```bash
+    mkdir -p ~/Applications
+    mv Eru_amd64.AppImage ~/Applications/Eru.AppImage
+    ~/Applications/Eru.AppImage
+    ```
+    </Tip>
+    
+    ### Fedora/RHEL (from .deb)
+    
+    ```bash
+    # Install alien to convert .deb to .rpm
+    sudo dnf install alien
+    
+    # Convert and install
+    wget https://github.com/royalbhati/eru/releases/latest/download/Eru_amd64.deb
+    sudo alien -r Eru_amd64.deb
+    sudo rpm -i eru-*.rpm
+    ```
+  </Step>
+</Steps>
+
+## Verify Installation
+
+After installation, verify Eru is working correctly:
+
+<Steps>
+  <Step title="Launch Eru">
+    Open Eru from your Applications folder, Start Menu, or terminal
+  </Step>
+  
+  <Step title="Check Version">
+    The version number should appear in the app's About section or title bar
+  </Step>
+  
+  <Step title="Test Basic Functionality">
+    Try making a simple GET request to verify the Go backend is working:
+    
+    - URL: `https://httpbin.org/get`
+    - Method: `GET`
+    - Click **Send**
+    
+    You should see a 200 OK response with JSON data
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<Accordion title="macOS: 'Eru.app is damaged and can't be opened'">
+  This is a false positive from macOS Gatekeeper. The app is not actually damaged.
+  
+  **Solution**: Run the terminal command to remove quarantine attributes:
+  
+  ```bash
+  find /Applications/Eru.app -exec xattr -c {} \;
+  ```
+  
+  If you still see issues, try removing the app from quarantine first:
+  
+  ```bash
+  sudo xattr -r -d com.apple.quarantine /Applications/Eru.app
+  ```
+</Accordion>
+
+<Accordion title="Windows: SmartScreen blocks installation">
+  Windows SmartScreen may warn about unrecognized apps from unsigned publishers.
+  
+  **Solution**:
+  1. Click **"More info"** on the SmartScreen warning
+  2. Click **"Run anyway"**
+  
+  This is safe — the warning appears because Eru isn't code-signed with an expensive Extended Validation certificate.
+</Accordion>
+
+<Accordion title="Linux: Missing dependencies">
+  If Eru fails to launch, you may be missing required system libraries.
+  
+  **Solution for Debian/Ubuntu**:
+  ```bash
+  sudo apt-get update
+  sudo apt-get install -y \n    libwebkit2gtk-4.0-37 \n    libgtk-3-0 \n    libayatana-appindicator3-1
+  ```
+  
+  **Solution for Fedora**:
+  ```bash
+  sudo dnf install -y \n    webkit2gtk3 \n    gtk3
+  ```
+  
+  **Solution for Arch Linux**:
+  ```bash
+  sudo pacman -S webkit2gtk gtk3
+  ```
+</Accordion>
+
+<Accordion title="Linux: AppImage won't run">
+  If the AppImage fails with "FUSE" errors:
+  
+  **Solution 1 - Extract and run**:
+  ```bash
+  ./Eru_amd64.AppImage --appimage-extract
+  ./squashfs-root/AppRun
+  ```
+  
+  **Solution 2 - Install FUSE**:
+  ```bash
+  # Debian/Ubuntu
+  sudo apt-get install fuse libfuse2
+  
+  # Fedora
+  sudo dnf install fuse fuse-libs
+  ```
+</Accordion>
+
+<Accordion title="Linux: Git Sync SSH authentication issues">
+  If Git Sync fails with SSH authentication errors when launched from desktop:
+  
+  **Solution**: Ensure ssh-agent is running and your key is loaded:
+  
+  ```bash
+  # Start ssh-agent
+  eval "$(ssh-agent -s)"
+  
+  # Add your SSH key
+  ssh-add ~/.ssh/id_ed25519  # or id_rsa
+  
+  # Verify key is loaded
+  ssh-add -l
+  ```
+  
+  For persistent ssh-agent across sessions, add to `~/.bashrc` or `~/.zshrc`:
+  
+  ```bash
+  if [ -z "$SSH_AUTH_SOCK" ]; then
+    eval "$(ssh-agent -s)"
+    ssh-add ~/.ssh/id_ed25519 2>/dev/null
+  fi
+  ```
+  
+  Alternatively, use HTTPS URLs for Git remotes instead of SSH.
+</Accordion>
+
+<Accordion title="App crashes or won't start">
+  **Reset application data** (will delete all collections and settings):
+  
+  **macOS**:
+  ```bash
+  rm -rf ~/Library/Application\ Support/com.apiclient.eru
+  ```
+  
+  **Windows**:
+  ```cmd
+  rmdir /s "%APPDATA%\com.apiclient.eru"
+  ```
+  
+  **Linux**:
+  ```bash
+  rm -rf ~/.local/share/com.apiclient.eru
+  ```
+</Accordion>
+
+## Building from Source
+
+If you prefer to build Eru yourself or contribute to development:
+
+### Prerequisites
+
+```bash
+Node.js >= 18
+pnpm >= 8
+Go >= 1.21
+Rust (latest stable)
+```
+
+### Build Steps
+
+```bash
+# Clone the repository
+git clone https://github.com/royalbhati/eru.git
+cd eru
+
+# Install dependencies
+pnpm install
+
+# Build Go core
+pnpm build:core
+
+# Start development server
+pnpm dev
+
+# Build for production
+pnpm build
+```
+
+<Info>
+For detailed build instructions and development setup, see [CONTRIBUTING.md](https://github.com/royalbhati/eru/blob/main/CONTRIBUTING.md)
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Make your first API request and explore Eru's features
+  </Card>
+  <Card title="Collections" icon="folder" href="/features/collections">
+    Learn how to organize requests into collections
+  </Card>
+</CardGroup>

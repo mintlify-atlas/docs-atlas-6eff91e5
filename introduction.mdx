@@ -1,0 +1,151 @@
+---
+title: Introduction to Eru
+description: A fast, minimal, extensible API client built with Go, Tauri, and SolidJS
+---
+
+<img src="/images/eru-hero.png" alt="Eru API Client" className="rounded-lg" />
+
+## What is Eru?
+
+Eru is a **modern, high-performance API client** designed for developers who value speed, simplicity, and extensibility. Built with a powerful Go backend, lightweight Tauri shell, and reactive SolidJS frontend, Eru delivers a native desktop experience that's orders of magnitude faster than Electron-based alternatives.
+
+<CardGroup cols={2}>
+  <Card title="Lightning Fast" icon="bolt">
+    Go-powered backend ensures minimal latency for all API requests
+  </Card>
+  <Card title="Cross-Platform" icon="desktop">
+    Native desktop app for macOS, Windows, and Linux
+  </Card>
+  <Card title="Git Sync" icon="git-alt">
+    Collaborate with your team using Git-based collection sync
+  </Card>
+  <Card title="Extensible" icon="puzzle-piece">
+    Plugin system lets you customize functionality to your needs
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Workflow Editor
+
+Chain API requests together with variable extraction via JSONPath. Execute complex multi-step API flows where each request can extract data from previous responses and pass it to subsequent requests.
+
+<Tip>
+Workflows are perfect for testing authentication flows, multi-step onboarding processes, or any scenario requiring sequential API calls with data dependencies.
+</Tip>
+
+### Real-Time Protocol Support
+
+Eru provides first-class support for modern real-time protocols:
+
+<Tabs>
+  <Tab title="WebSocket">
+    Connect to WebSocket endpoints, send and receive messages in real-time, and inspect the full message history with timestamps.
+  </Tab>
+  <Tab title="Server-Sent Events">
+    Subscribe to SSE endpoints and monitor server events as they stream in, with support for custom event types and automatic reconnection.
+  </Tab>
+</Tabs>
+
+### Collections & Environments
+
+Organize your API requests into collections and manage variables across different environments (dev, staging, production). Variables support interpolation using `{{variable}}` syntax throughout request URLs, headers, and bodies.
+
+### Load Testing
+
+Run performance tests with configurable concurrency, duration, and ramp-up periods. Get detailed statistics including:
+
+- Requests per second (RPS)
+- Response time percentiles (P50, P90, P95, P99)
+- Error rates and status code distribution
+- Response time histograms
+
+### Response Comparison & Diffing
+
+Save response snapshots, set baselines, and compare responses across different environments or time periods. Eru computes detailed JSON diffs showing:
+
+- Added, removed, and modified fields
+- Header changes
+- Status code differences
+- Latency comparisons
+
+## Architecture Overview
+
+Eru uses a three-tier architecture that maximizes performance while maintaining cross-platform compatibility:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        SolidJS UI                           │
+│              Reactive UI layer (TypeScript)                 │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ IPC (JSON-RPC 2.0)
+┌─────────────────────────┴───────────────────────────────────┐
+│                       Tauri Shell                           │
+│            Desktop wrapper (Rust) - spawns sidecar          │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ Sidecar Process
+┌─────────────────────────┴───────────────────────────────────┐
+│                        Go Core                              │
+│     HTTP execution • Plugin runtime • Persistence           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+<Accordion title="Why this architecture?">
+**SolidJS Frontend**: Provides a reactive, performant UI with minimal bundle size compared to React or Vue.
+
+**Tauri Shell**: Uses native webview instead of bundling Chromium (like Electron), resulting in a ~10MB app instead of 100MB+.
+
+**Go Sidecar**: Handles all HTTP execution, plugin runtime, and data persistence with native performance. Go's excellent networking libraries and low latency make it ideal for an API client.
+
+This architecture means Eru starts in under 1 second and uses less than 100MB of RAM for typical workloads.
+</Accordion>
+
+## How Eru Compares
+
+<CardGroup cols={3}>
+  <Card title="vs Postman">
+    **Eru**: Native performance, open-source, Git-based sync, no account required
+    
+    **Postman**: Electron-based (slower), cloud-centric, requires account for sync
+  </Card>
+  <Card title="vs Insomnia">
+    **Eru**: Go-powered backend, plugin system, load testing built-in
+    
+    **Insomnia**: Electron-based, limited extensibility, no native load testing
+  </Card>
+  <Card title="vs HTTPie Desktop">
+    **Eru**: Full workflow engine, response diffing, real-time protocols
+    
+    **HTTPie**: Simpler feature set, focused on individual requests
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+<Info>
+**Backend**: Go 1.21+  
+**Desktop Shell**: Rust (Tauri 2.0)  
+**Frontend**: SolidJS 1.8 + TypeScript  
+**Networking**: Native Go `net/http` with HTTP/2 support  
+**Storage**: JSON-based file storage (easily version-controlled)  
+**Plugin Runtime**: Go + Goja (JavaScript engine)
+</Info>
+
+## Open Source & Privacy
+
+Eru is **MIT licensed** and completely open source. All your data is stored locally in JSON files that you control. 
+
+<Warning>
+Eru collects anonymous usage analytics via PostHog to help improve the product. **No URLs, request bodies, auth tokens, headers, or personal information is ever collected.** Telemetry can be disabled in Settings → Privacy.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Download and install Eru for your platform
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Make your first request and explore core features
+  </Card>
+</CardGroup>

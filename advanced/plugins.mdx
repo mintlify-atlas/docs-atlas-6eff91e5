@@ -1,0 +1,348 @@
+---
+title: Plugin System
+description: Extend Eru's functionality with JavaScript plugins that can modify requests and responses
+---
+
+## Overview
+
+Eru features a powerful plugin system that allows you to extend and customize its behavior using JavaScript. Plugins run in a sandboxed JavaScript runtime (using goja) and can intercept requests and responses through lifecycle hooks.
+
+<Info>
+Plugins enable use cases like:
+- Adding authentication headers dynamically
+- Logging request/response data to external systems
+- Transforming request payloads before sending
+- Validating or modifying response data
+- Implementing custom business logic
+</Info>
+
+## Plugin Architecture
+
+Plugins are JavaScript files that export hook functions. Each plugin runs in an isolated VM with access to a limited API surface for security.
+
+### Available Hooks
+
+<CardGroup cols={2}>
+  <Card title="onPreRequest" icon="arrow-right">
+    Called before a request is executed. Can modify the request before sending.
+  </Card>
+  <Card title="onPostResponse" icon="arrow-left">
+    Called after a response is received. Can transform or log response data.
+  </Card>
+</CardGroup>
+
+## Creating a Plugin
+
+### Basic Plugin Structure
+
+Plugins are standard JavaScript files with hook functions:
+
+```javascript plugin.js
+// onPreRequest hook - modify request before sending
+function onPreRequest(ctx) {
+  // Add custom header
+  ctx.request.headers = ctx.request.headers || {};
+  ctx.request.headers["X-API-Version"] = "2.0";
+  ctx.request.headers["X-Request-ID"] = generateUUID();
+  
+  // Log the request
+  console.log("Sending request to: " + ctx.request.url);
+  
+  // Return modified context
+  return { request: ctx.request };
+}
+
+// onPostResponse hook - process response after receiving
+function onPostResponse(ctx) {
+  // Log response status
+  console.log("Response status: " + ctx.response.statusCode);
+  console.log("Duration: " + ctx.response.duration + "ms");
+  
+  // Transform response body
+  if (ctx.response.statusCode === 200) {
+    ctx.response.body = ctx.response.body + "\n// Processed by plugin";
+  }
+  
+  return { response: ctx.response };
+}
+
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0;
+    return (c == 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+```
+
+### Context Object
+
+Both hooks receive a context object with the following structure:
+
+<Tabs>
+  <Tab title="Request Context">
+    ```javascript
+    {
+      request: {
+        id: "req-123",
+        method: "GET",
+        url: "https://api.example.com/users",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: "{...}"
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Response Context">
+    ```javascript
+    {
+      request: { /* same as above */ },
+      response: {
+        statusCode: 200,
+        status: "200 OK",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: "{...}",
+        duration: 145  // milliseconds
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Plugin Examples
+
+### Authentication Plugin
+
+Automatically add authentication tokens to all requests:
+
+```javascript auth-plugin.js
+function onPreRequest(ctx) {
+  // Get token from environment or config
+  const token = "your-api-token";
+  
+  ctx.request.headers = ctx.request.headers || {};
+  ctx.request.headers["Authorization"] = "Bearer " + token;
+  
+  return { request: ctx.request };
+}
+```
+
+### Request Logging Plugin
+
+Log all requests and responses to console:
+
+```javascript logger-plugin.js
+function onPreRequest(ctx) {
+  console.log("[REQUEST] " + ctx.request.method + " " + ctx.request.url);
+  console.log("[HEADERS] " + JSON.stringify(ctx.request.headers));
+  
+  if (ctx.request.body) {
+    console.log("[BODY] " + ctx.request.body);
+  }
+  
+  return { request: ctx.request };
+}
+
+function onPostResponse(ctx) {
+  console.log("[RESPONSE] " + ctx.response.statusCode + " (" + ctx.response.duration + "ms)");
+  console.log("[BODY] " + ctx.response.body);
+  
+  return { response: ctx.response };
+}
+```
+
+### Response Validation Plugin
+
+Validate responses and add metadata:
+
+```javascript validator-plugin.js
+function onPostResponse(ctx) {
+  // Parse JSON response
+  try {
+    const data = JSON.parse(ctx.response.body);
+    
+    // Validate required fields
+    if (!data.id || !data.name) {
+      console.error("Validation failed: missing required fields");
+    }
+    
+    // Check response time
+    if (ctx.response.duration > 1000) {
+      console.error("Warning: Slow response (" + ctx.response.duration + "ms)");
+    }
+    
+  } catch (e) {
+    console.error("Failed to parse response: " + e);
+  }
+  
+  return { response: ctx.response };
+}
+```
+
+## Loading Plugins
+
+<Steps>
+  <Step title="Prepare Plugin File">
+    Create a JavaScript file with your plugin code (e.g., `my-plugin.js`)
+  </Step>
+  
+  <Step title="Load Plugin">
+    Use the plugin manager to load your plugin:
+    
+    ```go
+    manager := plugins.NewManager()
+    err := manager.Load("/path/to/my-plugin.js")
+    if err != nil {
+        log.Fatal(err)
+    }
+    ```
+  </Step>
+  
+  <Step title="Execute Hooks">
+    The plugin system automatically executes hooks during request lifecycle:
+    
+    ```go
+    // Before request
+    ctx := &plugins.Context{
+        Request: request,
+    }
+    ctx, _ = manager.Execute(plugins.HookPreRequest, ctx)
+    
+    // After response
+    ctx.Response = response
+    ctx, _ = manager.Execute(plugins.HookPostResponse, ctx)
+    ```
+  </Step>
+</Steps>
+
+## Plugin Management
+
+### List Loaded Plugins
+
+```go
+plugins := manager.List()
+for _, plugin := range plugins {
+    fmt.Printf("Plugin: %s (v%s)\n", plugin.Name, plugin.Version)
+    fmt.Printf("  Permissions: %v\n", plugin.Permissions)
+}
+```
+
+### Enable/Disable Plugins
+
+```go
+// Disable a plugin
+manager.Disable("my-plugin.js")
+
+// Enable a plugin
+manager.Enable("my-plugin.js")
+```
+
+### Unload Plugins
+
+```go
+err := manager.Unload("my-plugin.js")
+if err != nil {
+    log.Printf("Failed to unload plugin: %v", err)
+}
+```
+
+## Console API
+
+Plugins have access to a limited console API for logging:
+
+```javascript
+console.log("Info message");    // Logs: [plugin-id] Info message
+console.error("Error message"); // Logs: [plugin-id] ERROR: Error message
+```
+
+<Note>
+Console output is prefixed with the plugin ID for easy identification in logs.
+</Note>
+
+## Permissions
+
+Plugins are assigned permissions when loaded. Currently supported permissions:
+
+- `network` - Allows modifying network requests (enabled by default)
+
+Permissions are defined in the plugin metadata:
+
+```go
+type PluginInfo struct {
+    ID          string
+    Name        string
+    Version     string
+    Description string
+    Permissions []Permission
+}
+```
+
+## Security Considerations
+
+<Warning>
+**Sandboxed Execution**
+
+Plugins run in a sandboxed JavaScript runtime (goja) with:
+- No access to filesystem
+- No access to network (except through provided APIs)
+- No access to system commands
+- Limited to synchronous execution
+</Warning>
+
+### Best Practices
+
+1. **Review Plugin Code** - Always review plugin code before loading
+2. **Limit Plugin Scope** - Keep plugins focused on specific tasks
+3. **Error Handling** - Plugin errors are logged but don't crash the application
+4. **Performance** - Plugins run synchronously; avoid heavy computation
+
+## Implementation Details
+
+The plugin system uses:
+
+- **Runtime**: [goja](https://github.com/dop251/goja) - Pure Go JavaScript engine
+- **VM Pooling**: Reuses VM instances for better performance
+- **Thread Safety**: Concurrent plugin execution is safe
+
+Source: `apps/desktop/core/internal/plugins/plugin.go:74-83`
+
+```go
+func NewManager() Manager {
+    m := &manager{
+        plugins: make(map[string]*jsPlugin),
+    }
+    m.vmPool.New = func() interface{} {
+        return goja.New()
+    }
+    return m
+}
+```
+
+## Troubleshooting
+
+<Accordion title="Plugin not executing">
+  Check that:
+  - Plugin is loaded successfully
+  - Plugin is enabled (not disabled)
+  - Hook function names are correct: `onPreRequest`, `onPostResponse`
+  - Hook functions return the context object
+</Accordion>
+
+<Accordion title="JavaScript errors in plugin">
+  Common issues:
+  - Syntax errors in JavaScript code
+  - Attempting to use Node.js APIs (not available in goja)
+  - Accessing undefined properties without checking
+  
+  Check console logs for detailed error messages prefixed with plugin ID.
+</Accordion>
+
+<Accordion title="Performance issues">
+  - Avoid heavy computation in plugins
+  - Don't modify large response bodies unnecessarily
+  - Keep plugins simple and focused
+  - Check plugin execution time in logs
+</Accordion>

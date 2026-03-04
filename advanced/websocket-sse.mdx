@@ -1,0 +1,544 @@
+---
+title: WebSocket & SSE
+description: Test real-time streaming endpoints with WebSocket and Server-Sent Events (SSE) support
+---
+
+## Overview
+
+Eru provides built-in support for testing real-time streaming protocols:
+
+<CardGroup cols={2}>
+  <Card title="WebSocket" icon="arrows-left-right">
+    Full-duplex communication for bidirectional real-time data
+  </Card>
+  <Card title="Server-Sent Events" icon="arrow-right">
+    Server-to-client streaming over HTTP for unidirectional updates
+  </Card>
+</CardGroup>
+
+## WebSocket Connections
+
+WebSocket support enables testing of real-time bidirectional communication endpoints.
+
+### Connecting to WebSocket
+
+<Steps>
+  <Step title="Create Connection Request">
+    ```go
+    req := &types.WebSocketRequest{
+        ID:           "conn-123",
+        URL:          "wss://api.example.com/ws",
+        Headers:      map[string]string{
+            "Authorization": "Bearer token",
+        },
+        Subprotocols: []string{"chat", "v1"},
+    }
+    ```
+  </Step>
+  
+  <Step title="Establish Connection">
+    ```go
+    client := streaming.NewWebSocketClient(notifier)
+    status, err := client.Connect(req)
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    fmt.Printf("Connected to: %s\n", status.URL)
+    fmt.Printf("State: %s\n", status.State)
+    ```
+  </Step>
+  
+  <Step title="Monitor Connection State">
+    The client sends state notifications:
+    - `StateConnecting` - Attempting to connect
+    - `StateConnected` - Successfully connected
+    - `StateDisconnected` - Connection closed
+    - `StateError` - Connection error
+  </Step>
+</Steps>
+
+### Connection Configuration
+
+The WebSocket client supports advanced configuration:
+
+```go
+type WebSocketRequest struct {
+    ID           string            // Unique connection identifier
+    URL          string            // WebSocket URL (ws:// or wss://)
+    Headers      map[string]string // HTTP headers for handshake
+    Subprotocols []string          // WebSocket subprotocols
+}
+```
+
+<Info>
+The client uses 1MB read/write buffers for efficient message handling.
+Source: `apps/desktop/core/internal/streaming/websocket.go:69-73`
+</Info>
+
+### Sending Messages
+
+Send text or binary messages through the WebSocket:
+
+<Tabs>
+  <Tab title="Text Message">
+    ```go
+    err := client.Send(
+        "conn-123",           // Connection ID
+        "{\"type\": \"ping\"}", // Message data
+        "text"                // Message type
+    )
+    if err != nil {
+        log.Printf("Send failed: %v", err)
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Binary Message">
+    ```go
+    binaryData := "\x00\x01\x02\x03"
+    err := client.Send(
+        "conn-123",
+        binaryData,
+        "binary"
+    )
+    ```
+  </Tab>
+</Tabs>
+
+Sent messages trigger a notification with metadata:
+
+```go
+type WebSocketMessage struct {
+    ConnectionID string // Connection this message belongs to
+    Direction    string // "sent" or "received"
+    MessageType  string // "text", "binary", "ping", "pong", "close"
+    Data         string // Message payload
+    Timestamp    int64  // Unix milliseconds
+}
+```
+
+### Receiving Messages
+
+Messages are received asynchronously via the read loop:
+
+```go
+// The notifier callback receives messages
+notifier := func(method string, params interface{}) {
+    switch method {
+    case "ws.message":
+        msg := params.(*types.WebSocketMessage)
+        if msg.Direction == "received" {
+            fmt.Printf("[%s] Received: %s\n", msg.MessageType, msg.Data)
+        }
+    case "connection.state":
+        status := params.(*types.ConnectionStatus)
+        fmt.Printf("State: %s\n", status.State)
+    }
+}
+```
+
+The client automatically handles:
+- Text messages
+- Binary messages
+- Ping/Pong frames
+- Close frames
+
+### Disconnecting
+
+Gracefully close a WebSocket connection:
+
+```go
+err := client.Disconnect("conn-123")
+if err != nil {
+    log.Printf("Disconnect failed: %v", err)
+}
+```
+
+This sends a proper WebSocket close frame before closing the connection.
+
+Source: `apps/desktop/core/internal/streaming/websocket.go:210-216`
+
+### Managing Multiple Connections
+
+List all active WebSocket connections:
+
+```go
+connections := client.ListConnections()
+for _, conn := range connections {
+    fmt.Printf("%s: %s (%s)\n", conn.ID, conn.URL, conn.State)
+    
+    // Calculate uptime
+    uptime := time.Now().UnixMilli() - conn.StartedAt
+    fmt.Printf("  Uptime: %dms\n", uptime)
+}
+```
+
+## Server-Sent Events (SSE)
+
+SSE provides unidirectional server-to-client streaming over HTTP.
+
+### Connecting to SSE Endpoint
+
+<Steps>
+  <Step title="Create SSE Request">
+    ```go
+    req := &types.SSERequest{
+        ID:      "sse-123",
+        URL:     "https://api.example.com/events",
+        Headers: map[string]string{
+            "Authorization": "Bearer token",
+        },
+    }
+    ```
+  </Step>
+  
+  <Step title="Connect to Stream">
+    ```go
+    client := streaming.NewSSEClient(notifier)
+    status, err := client.Connect(req)
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    fmt.Printf("Streaming from: %s\n", status.URL)
+    ```
+  </Step>
+  
+  <Step title="Receive Events">
+    Events are delivered via the notifier callback:
+    
+    ```go
+    notifier := func(method string, params interface{}) {
+        if method == "sse.event" {
+            event := params.(types.SSEEvent)
+            fmt.Printf("[%s] %s\n", event.EventType, event.Data)
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+### SSE Event Format
+
+SSE events follow the standard format:
+
+```go
+type SSEEvent struct {
+    ConnectionID string // SSE connection identifier
+    ID           string // Event ID (optional)
+    EventType    string // Event type (default: "message")
+    Data         string // Event data
+    Retry        int    // Reconnection time in ms (optional)
+    Timestamp    int64  // Unix milliseconds
+}
+```
+
+<Tabs>
+  <Tab title="Simple Event">
+    ```
+    data: Hello, world!
+    ```
+    
+    Parsed as:
+    ```go
+    SSEEvent{
+        EventType: "message",
+        Data:      "Hello, world!",
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Named Event">
+    ```
+    event: userJoined
+    data: {"username": "alice"}
+    ```
+    
+    Parsed as:
+    ```go
+    SSEEvent{
+        EventType: "userJoined",
+        Data:      `{"username": "alice"}`,
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Multi-line Data">
+    ```
+    data: First line
+    data: Second line
+    data: Third line
+    ```
+    
+    Parsed as:
+    ```go
+    SSEEvent{
+        Data: "First line\nSecond line\nThird line",
+    }
+    ```
+  </Tab>
+  
+  <Tab title="With ID and Retry">
+    ```
+    id: 12345
+    event: update
+    retry: 10000
+    data: {"status": "ok"}
+    ```
+    
+    Parsed as:
+    ```go
+    SSEEvent{
+        ID:        "12345",
+        EventType: "update",
+        Retry:     10000,
+        Data:      `{"status": "ok"}`,
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### SSE Request Headers
+
+The SSE client automatically sets required headers:
+
+```go
+Accept: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+```
+
+Source: `apps/desktop/core/internal/streaming/sse.go:99-101`
+
+You can add custom headers via the request:
+
+```go
+req := &types.SSERequest{
+    URL: "https://api.example.com/stream",
+    Headers: map[string]string{
+        "Authorization": "Bearer token",
+        "X-Client-ID":   "client-123",
+    },
+}
+```
+
+### Disconnecting from SSE
+
+Close an SSE connection:
+
+```go
+err := client.Disconnect("sse-123")
+if err != nil {
+    log.Printf("Disconnect failed: %v", err)
+}
+```
+
+The connection context is cancelled, which stops the HTTP request and event stream.
+
+### Error Handling
+
+SSE errors are reported via connection state notifications:
+
+```go
+notifier := func(method string, params interface{}) {
+    if method == "connection.state" {
+        status := params.(*types.ConnectionStatus)
+        
+        if status.State == types.StateError {
+            fmt.Printf("SSE Error: %s\n", status.Error)
+            
+            // Common errors:
+            // - HTTP 4xx/5xx status codes
+            // - Network timeouts
+            // - Connection dropped
+        }
+    }
+}
+```
+
+## Connection States
+
+Both WebSocket and SSE connections go through these states:
+
+```go
+const (
+    StateConnecting   = "connecting"   // Attempting connection
+    StateConnected    = "connected"    // Successfully connected
+    StateDisconnected = "disconnected" // Cleanly closed
+    StateError        = "error"        // Error occurred
+)
+```
+
+### State Transitions
+
+<Steps>
+  <Step title="Connecting">
+    Initial state when `Connect()` is called. For WebSocket, this is during the handshake. For SSE, during HTTP request.
+  </Step>
+  
+  <Step title="Connected">
+    Connection established successfully. Ready to send/receive data.
+  </Step>
+  
+  <Step title="Disconnected">
+    Connection closed normally via `Disconnect()` or server-initiated close.
+  </Step>
+  
+  <Step title="Error">
+    Connection failed or dropped unexpectedly. Check the `Error` field for details.
+  </Step>
+</Steps>
+
+## Use Cases
+
+### Real-time Chat Testing
+
+```go
+// Connect to chat WebSocket
+req := &types.WebSocketRequest{
+    ID:  "chat-1",
+    URL: "wss://chat.example.com/ws",
+}
+status, _ := wsClient.Connect(req)
+
+// Send message
+wsClient.Send("chat-1", `{
+    "type": "message",
+    "text": "Hello, everyone!"
+}`, "text")
+
+// Receive messages via notifier
+```
+
+### Live Event Monitoring
+
+```go
+// Connect to SSE event stream
+req := &types.SSERequest{
+    ID:  "events-1",
+    URL: "https://api.example.com/events",
+}
+sseClient.Connect(req)
+
+// Process events as they arrive
+notifier := func(method string, params interface{}) {
+    if method == "sse.event" {
+        event := params.(types.SSEEvent)
+        switch event.EventType {
+        case "deployment":
+            handleDeployment(event.Data)
+        case "alert":
+            handleAlert(event.Data)
+        }
+    }
+}
+```
+
+### Stock Price Updates
+
+```go
+// Subscribe to stock price SSE stream
+req := &types.SSERequest{
+    ID:  "stocks-1",
+    URL: "https://api.stocks.com/stream/AAPL",
+}
+sseClient.Connect(req)
+
+// Receive price updates in real-time
+```
+
+## Performance Considerations
+
+<Note>
+**Buffer Sizes**
+
+WebSocket client uses 1MB read/write buffers by default. This handles most use cases efficiently.
+
+For very high-throughput scenarios, consider:
+- Monitoring message rates
+- Implementing backpressure handling
+- Batching messages when possible
+</Note>
+
+### Connection Limits
+
+The implementation supports multiple concurrent connections. Track active connections:
+
+```go
+wsConnections := wsClient.ListConnections()
+sseConnections := sseClient.ListConnections()
+
+totalConnections := len(wsConnections) + len(sseConnections)
+fmt.Printf("Active connections: %d\n", totalConnections)
+```
+
+## Troubleshooting
+
+<Accordion title="WebSocket connection fails">
+  **Common causes**:
+  - Invalid URL (must be `ws://` or `wss://`)
+  - Server requires specific subprotocols
+  - Authentication headers missing
+  - Server-side connection limits
+  
+  **Solutions**:
+  - Verify URL format
+  - Check required headers and subprotocols
+  - Test with a WebSocket client tool first
+  - Check server logs
+</Accordion>
+
+<Accordion title="SSE stream disconnects frequently">
+  **Common causes**:
+  - Network timeouts
+  - Server-side timeout configuration
+  - Proxy or load balancer limits
+  
+  **Solutions**:
+  - Check network stability
+  - Implement reconnection logic
+  - Verify server keep-alive settings
+  - Configure proxy timeout settings
+</Accordion>
+
+<Accordion title="Messages not being received">
+  **For WebSocket**:
+  - Ensure notifier callback is properly registered
+  - Check connection state is "connected"
+  - Verify message format matches server expectations
+  
+  **For SSE**:
+  - Check that server is sending proper SSE format
+  - Verify events are separated by blank lines
+  - Check HTTP status is 200 OK
+  - Ensure `Content-Type: text/event-stream` header
+</Accordion>
+
+<Accordion title="High memory usage with long-running connections">
+  **Solutions**:
+  - Close connections when not needed
+  - Implement connection pooling
+  - Monitor and limit concurrent connections
+  - Process messages immediately instead of buffering
+</Accordion>
+
+## Implementation Details
+
+### WebSocket Client
+
+- **Library**: [gorilla/websocket](https://github.com/gorilla/websocket)
+- **Thread Safety**: Writes are mutex-protected
+- **Auto-cleanup**: Connections removed on close
+- **Error Recovery**: Unexpected close errors are reported
+
+Source: `apps/desktop/core/internal/streaming/websocket.go`
+
+### SSE Client
+
+- **Protocol**: Standard HTTP with event-stream parsing
+- **Timeout**: No timeout (persistent connection)
+- **Parsing**: Handles all SSE fields (data, event, id, retry)
+- **Comments**: Automatically skips comment lines (`:...`)
+
+Source: `apps/desktop/core/internal/streaming/sse.go`

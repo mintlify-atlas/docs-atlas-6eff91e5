@@ -1,80 +1,472 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart Guide
+description: Get started with Eru in under 5 minutes - make your first request, create collections, and explore core features
 ---
 
-## Get started in three steps
+## Make Your First Request
 
-Get your documentation site running locally and make your first customization.
+Let's start by making a simple API request to verify everything works.
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Open Eru">
+    Launch Eru from your Applications folder, Start Menu, or terminal.
+  </Step>
+  
+  <Step title="Create a New Request">
+    Click the **New Request** button (or press `Cmd+N` / `Ctrl+N`).
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    You'll see the request editor with these key sections:
+    - **Method dropdown**: GET, POST, PUT, DELETE, PATCH
+    - **URL bar**: Enter your API endpoint
+    - **Headers, Body, Auth tabs**: Configure request details
+    - **Send button**: Execute the request
+  </Step>
+  
+  <Step title="Make a GET Request">
+    Let's test with a simple public API:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    1. Keep method as **GET**
+    2. Enter URL: `https://httpbin.org/get`
+    3. Click **Send**
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    You should see a 200 OK response with JSON containing:
+    ```json
+    {
+      "args": {},
+      "headers": {
+        "Accept": "*/*",
+        "Host": "httpbin.org",
+        "User-Agent": "..."
+      },
+      "origin": "...",
+      "url": "https://httpbin.org/get"
+    }
+    ```
+    
+    <Tip>
+    Notice the **Timing** tab showing detailed performance metrics:
+    - DNS Lookup: Time to resolve hostname
+    - TCP Connect: Connection establishment time
+    - TLS Handshake: SSL/TLS negotiation time
+    - Time to First Byte (TTFB): Server response latency
+    - Download: Content transfer time
+    </Tip>
+  </Step>
+  
+  <Step title="Inspect the Response">
+    The response panel shows:
+    - **Status code** and status text (e.g., `200 OK`)
+    - **Headers** tab: All response headers
+    - **Body** tab: Response content (with JSON syntax highlighting)
+    - **Timing** tab: Detailed performance breakdown
+    - **Total duration** in milliseconds
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Make a POST Request with JSON Body
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Now let's send data to an API:
 
-### Step 3: Go live
+<Steps>
+  <Step title="Configure the Request">
+    1. Change method to **POST**
+    2. URL: `https://httpbin.org/post`
+    3. Click the **Body** tab
+    4. Select **JSON** as the body type
+  </Step>
+  
+  <Step title="Add Request Body">
+    Enter this JSON in the body editor:
+    
+    ```json
+    {
+      "name": "Eru API Client",
+      "type": "desktop",
+      "features": [
+        "fast",
+        "minimal",
+        "extensible"
+      ]
+    }
+    ```
+  </Step>
+  
+  <Step title="Send and Verify">
+    Click **Send**. The response will echo back your JSON in the `"json"` field:
+    
+    ```json
+    {
+      "json": {
+        "name": "Eru API Client",
+        "type": "desktop",
+        "features": ["fast", "minimal", "extensible"]
+      },
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      ...
+    }
+    ```
+  </Step>
+</Steps>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+## Create Your First Collection
 
-## Next steps
+Collections help you organize related requests (e.g., all endpoints for a specific API).
 
-Now that you have your docs running, explore these key features:
+<Steps>
+  <Step title="Create a Collection">
+    1. Click the **Collections** icon in the sidebar
+    2. Click **New Collection**
+    3. Name it: `HTTPBin Tests`
+    4. (Optional) Add a description in Markdown
+    5. Click **Create**
+  </Step>
+  
+  <Step title="Save Requests to Collection">
+    1. Go back to your GET request
+    2. Click the **Save** button (💾)
+    3. Name it: `Get User Info`
+    4. Select collection: `HTTPBin Tests`
+    5. Click **Save**
+    
+    Do the same for your POST request, naming it `Create User`.
+  </Step>
+  
+  <Step title="Browse Collection">
+    Click on **HTTPBin Tests** in the sidebar to see your saved requests:
+    
+    ```
+    📁 HTTPBin Tests
+      ├── Get User Info
+      └── Create User
+    ```
+    
+    Click any request to load it instantly.
+  </Step>
+</Steps>
+
+## Set Up Environment Variables
+
+Environments let you manage different configurations (dev, staging, prod) and reuse values across requests.
+
+<Steps>
+  <Step title="Create an Environment">
+    1. Click **Environments** in the sidebar
+    2. Click **New Environment**
+    3. Name it: `Development`
+    4. Click **Create**
+  </Step>
+  
+  <Step title="Add Variables">
+    Add these key-value pairs:
+    
+    | Key | Value |
+    |-----|-------|
+    | `base_url` | `https://httpbin.org` |
+    | `api_key` | `demo-key-12345` |
+    | `timeout` | `30` |
+    
+    Click **Save**.
+  </Step>
+  
+  <Step title="Use Variables in Requests">
+    Variables use double curly braces: `{{variable_name}}`
+    
+    **Example**: Change your request URL from:
+    ```
+    https://httpbin.org/get
+    ```
+    
+    To:
+    ```
+    {{base_url}}/get
+    ```
+    
+    You can use variables in:
+    - URLs: `{{base_url}}/users/{{user_id}}`
+    - Headers: `Authorization: Bearer {{api_key}}`
+    - Request bodies: `{"timeout": {{timeout}}}`
+    
+    <Info>
+    Select your environment from the dropdown in the top bar before sending requests. Variables will be interpolated automatically.
+    </Info>
+  </Step>
+</Steps>
+
+## Add Authentication
+
+Eru supports multiple authentication methods:
+
+<Tabs>
+  <Tab title="Bearer Token">
+    1. Click the **Auth** tab in your request
+    2. Select **Bearer Token** from the dropdown
+    3. Enter your token: `your-jwt-token-here`
+    
+    Eru automatically adds the header:
+    ```
+    Authorization: Bearer your-jwt-token-here
+    ```
+    
+    <Tip>
+    Use environment variables for tokens:
+    ```
+    {{auth_token}}
+    ```
+    </Tip>
+  </Tab>
+  
+  <Tab title="Basic Auth">
+    1. Click the **Auth** tab
+    2. Select **Basic Auth**
+    3. Enter **Username**: `demo-user`
+    4. Enter **Password**: `demo-pass`
+    
+    Eru automatically encodes credentials in base64 and adds:
+    ```
+    Authorization: Basic ZGVtby11c2VyOmRlbW8tcGFzcw==
+    ```
+  </Tab>
+  
+  <Tab title="API Key">
+    1. Click the **Auth** tab
+    2. Select **API Key**
+    3. Enter **Key Name**: `X-API-Key`
+    4. Enter **Value**: `your-api-key`
+    5. Select location: **Header** or **Query Parameter**
+    
+    For headers, Eru adds:
+    ```
+    X-API-Key: your-api-key
+    ```
+    
+    For query params, Eru appends:
+    ```
+    ?X-API-Key=your-api-key
+    ```
+  </Tab>
+</Tabs>
+
+## Test Authentication (Example)
+
+<Steps>
+  <Step title="Create Auth Test Request">
+    1. Method: **GET**
+    2. URL: `https://httpbin.org/bearer`
+    3. Auth: **Bearer Token** = `test-token-123`
+    4. Click **Send**
+  </Step>
+  
+  <Step title="Verify Response">
+    You should see:
+    ```json
+    {
+      "authenticated": true,
+      "token": "test-token-123"
+    }
+    ```
+  </Step>
+</Steps>
+
+## Execute a Simple Workflow
+
+Workflows chain multiple requests together, extracting data from responses to use in subsequent requests.
+
+<Steps>
+  <Step title="Understand the Scenario">
+    Let's simulate a two-step process:
+    1. **Login** to get an auth token
+    2. **Get user profile** using that token
+  </Step>
+  
+  <Step title="Create Step 1: Login">
+    1. Method: **POST**
+    2. URL: `https://httpbin.org/post`
+    3. Body (JSON):
+    ```json
+    {
+      "username": "demo",
+      "password": "secret"
+    }
+    ```
+    4. Save as: `Login Request`
+  </Step>
+  
+  <Step title="Create Step 2: Get Profile">
+    1. Method: **GET**
+    2. URL: `https://httpbin.org/bearer`
+    3. Auth: **Bearer Token** = `{{login_token}}`
+    
+    (We'll extract `login_token` from the first request)
+  </Step>
+  
+  <Step title="Create the Workflow">
+    1. Click **Workflows** in the sidebar
+    2. Click **New Workflow**
+    3. Name it: `Login Flow`
+    4. Add your two requests in order
+  </Step>
+  
+  <Step title="Extract Variables with JSONPath">
+    In the workflow editor:
+    
+    1. Click on **Login Request** step
+    2. Add a **Variable Extraction**:
+       - Variable name: `login_token`
+       - JSONPath: `$.json.token`
+       - (This extracts the token from the response)
+    
+    <Info>
+    JSONPath examples:
+    - `$.token` - Top-level token field
+    - `$.data.user.id` - Nested user ID
+    - `$.items[0].name` - First item's name
+    - `$.users[*].email` - All user emails
+    </Info>
+  </Step>
+  
+  <Step title="Run the Workflow">
+    Click **Run Workflow**. Eru will:
+    1. Execute the login request
+    2. Extract `login_token` from response
+    3. Inject token into the second request
+    4. Execute the profile request
+    
+    View the execution history showing each step's result.
+  </Step>
+</Steps>
+
+## Explore Advanced Features
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="WebSocket Testing" icon="plug">
+    **Try it:**
+    1. Change mode to **WebSocket**
+    2. URL: `wss://echo.websocket.org`
+    3. Click **Connect**
+    4. Send messages and see echoed responses in real-time
+  </Card>
+  
+  <Card title="Server-Sent Events" icon="satellite-dish">
+    **Try it:**
+    1. Change mode to **SSE**
+    2. URL: `https://your-sse-endpoint.com/events`
+    3. Click **Connect**
+    4. Watch events stream in with timestamps
+  </Card>
+  
+  <Card title="Load Testing" icon="gauge-high">
+    **Try it:**
+    1. Right-click any request
+    2. Select **Load Test**
+    3. Configure: 10 concurrent users, 100 total requests
+    4. View RPS, latency percentiles, error rates
+  </Card>
+  
+  <Card title="Response Comparison" icon="code-compare">
+    **Try it:**
+    1. Execute a request
+    2. Click **Save Response**
+    3. Modify request or environment
+    4. Execute again
+    5. Click **Compare** to see diffs
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Keyboard Shortcuts
+
+<Accordion title="Essential Shortcuts">
+  | Action | macOS | Windows/Linux |
+  |--------|-------|---------------|
+  | New Request | `Cmd+N` | `Ctrl+N` |
+  | Send Request | `Cmd+Enter` | `Ctrl+Enter` |
+  | Save Request | `Cmd+S` | `Ctrl+S` |
+  | Close Tab | `Cmd+W` | `Ctrl+W` |
+  | Search Collections | `Cmd+P` | `Ctrl+P` |
+  | Toggle Sidebar | `Cmd+B` | `Ctrl+B` |
+  | Format JSON | `Cmd+Shift+F` | `Ctrl+Shift+F` |
+</Accordion>
+
+## Set Up Git Sync (Optional)
+
+Collaborate with your team by syncing collections via Git:
+
+<Steps>
+  <Step title="Initialize Git Sync">
+    1. Go to **Settings → Git Sync**
+    2. Click **Initialize Repository**
+    3. Choose a local folder or clone from remote
+  </Step>
+  
+  <Step title="Configure Remote">
+    If using an existing Git repo:
+    
+    ```bash
+    # Clone your team's collection repo
+    git clone git@github.com:yourteam/api-collections.git
+    ```
+    
+    Then point Eru to that folder in Git Sync settings.
+  </Step>
+  
+  <Step title="Push/Pull Collections">
+    - Click **Pull** to fetch team updates
+    - Click **Push** to share your changes
+    - Enable **Auto Sync** to sync on every change
+    
+    <Tip>
+    Collections are stored as JSON files in `.api-collections/` directory. You can view diffs in Git to see what changed.
+    </Tip>
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Workflows" icon="diagram-project" href="/features/workflows">
+    Learn how to build complex multi-step API workflows
+  </Card>
+  <Card title="Environments" icon="layer-group" href="/features/environments">
+    Master environment variables and secrets management
+  </Card>
+  <Card title="Plugins" icon="puzzle-piece" href="/advanced/plugins">
+    Extend Eru with custom plugins
+  </Card>
+  <Card title="Git Sync" icon="git-alt" href="/advanced/git-sync">
+    Deep dive into team collaboration with Git
+  </Card>
+</CardGroup>
+
+## Tips for Success
+
+<Tip>
+**Use Collections**: Organize requests by API, feature, or service. Nested folders help with large projects.
+</Tip>
+
+<Tip>
+**Leverage Variables**: Store base URLs, API keys, and IDs in environments. Switch environments with one click.
+</Tip>
+
+<Tip>
+**Save Responses**: Create baselines for critical endpoints. Compare responses when debugging API changes.
+</Tip>
+
+<Tip>
+**Explore Timing**: Use the Timing tab to identify slow DNS, connection issues, or server latency.
+</Tip>
+
+<Warning>
+**Sensitive Data**: Never commit API keys or secrets to Git. Use environment variables and add `*.secret.json` to `.gitignore`.
+</Warning>
+
+## Get Help
+
+<CardGroup cols={2}>
+  <Card title="Documentation" icon="book" href="/">
+    Browse the full documentation
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/royalbhati/eru/issues">
+    Report bugs or request features
+  </Card>
+</CardGroup>

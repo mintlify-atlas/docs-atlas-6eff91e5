@@ -1,0 +1,675 @@
+---
+title: Building from Source
+description: Complete guide to building Eru from source on macOS, Linux, and Windows
+---
+
+## Prerequisites
+
+Before building Eru, ensure you have all required tools installed for your platform.
+
+### Required Tools
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    **Version**: 18.0.0 or higher
+    
+    [Download from nodejs.org](https://nodejs.org/)
+  </Card>
+  
+  <Card title="pnpm" icon="package">
+    **Version**: 8.0.0 or higher
+    
+    ```bash
+    npm install -g pnpm
+    ```
+  </Card>
+  
+  <Card title="Go" icon="golang">
+    **Version**: 1.21 or higher
+    
+    [Download from go.dev](https://go.dev/dl/)
+  </Card>
+  
+  <Card title="Rust" icon="rust">
+    **Version**: Latest stable
+    
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+  </Card>
+</CardGroup>
+
+### Platform-Specific Requirements
+
+<Tabs>
+  <Tab title="macOS">
+    <Steps>
+      <Step title="Install Xcode Command Line Tools">
+        ```bash
+        xcode-select --install
+        ```
+      </Step>
+      
+      <Step title="Verify installations">
+        ```bash
+        node --version    # Should be >= 18.0.0
+        pnpm --version    # Should be >= 8.0.0
+        go version        # Should be >= 1.21
+        rustc --version   # Should be latest stable
+        ```
+      </Step>
+    </Steps>
+    
+    <Note>
+    On Apple Silicon Macs (M1/M2/M3), all tools should be installed with native ARM64 support. The build will produce `aarch64-apple-darwin` binaries.
+    </Note>
+  </Tab>
+  
+  <Tab title="Linux">
+    <Steps>
+      <Step title="Install system dependencies">
+        **Debian/Ubuntu:**
+        ```bash
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libwebkit2gtk-4.1-dev \
+          libssl-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev
+        ```
+        
+        **Fedora:**
+        ```bash
+        sudo dnf install -y \
+          gcc-c++ \
+          webkit2gtk4.1-devel \
+          openssl-devel \
+          libappindicator-gtk3-devel \
+          librsvg2-devel
+        ```
+        
+        **Arch:**
+        ```bash
+        sudo pacman -S --needed \
+          webkit2gtk-4.1 \
+          base-devel \
+          openssl \
+          libappindicator-gtk3 \
+          librsvg
+        ```
+      </Step>
+      
+      <Step title="Verify installations">
+        ```bash
+        node --version
+        pnpm --version
+        go version
+        rustc --version
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Windows">
+    <Steps>
+      <Step title="Install Visual Studio Build Tools">
+        Download and install [Visual Studio 2022 Build Tools](https://visualstudio.microsoft.com/downloads/)
+        
+        Select "Desktop development with C++" workload
+      </Step>
+      
+      <Step title="Install WebView2">
+        Download [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+      </Step>
+      
+      <Step title="Install development tools">
+        ```powershell
+        # Install Node.js from nodejs.org
+        # Then install pnpm
+        npm install -g pnpm
+        
+        # Install Go from go.dev
+        # Install Rust from rustup.rs
+        ```
+      </Step>
+    </Steps>
+    
+    <Warning>
+    Windows builds require running commands in PowerShell or Command Prompt with Administrator privileges.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Quick Start
+
+The fastest way to get Eru running locally:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/royalbhati/eru.git
+    cd eru
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+    
+    This installs all Node.js dependencies for the entire monorepo.
+  </Step>
+  
+  <Step title="Build Go core">
+    ```bash
+    pnpm build:core
+    ```
+    
+    This compiles the Go backend and places the binary in `apps/desktop/src-tauri/binaries/`.
+  </Step>
+  
+  <Step title="Start development server">
+    ```bash
+    pnpm dev
+    ```
+    
+    This starts Tauri in dev mode with hot reload enabled.
+  </Step>
+</Steps>
+
+<Tip>
+The development server watches for UI changes and reloads automatically. If you modify Go code, run `pnpm build:core` again and restart the dev server.
+</Tip>
+
+## Detailed Build Process
+
+### Project Structure
+
+```
+eru/
+├── apps/
+│   └── desktop/
+│       ├── core/          # Go backend
+│       │   ├── cmd/apicore/     # Main entry point
+│       │   ├── internal/        # Core modules
+│       │   └── pkg/             # Shared packages
+│       ├── src-tauri/     # Rust Tauri wrapper
+│       │   ├── src/             # Rust source
+│       │   ├── binaries/        # Go binaries (generated)
+│       │   └── tauri.conf.json  # Tauri config
+│       └── ui/            # SolidJS frontend
+│           ├── src/             # UI source
+│           └── package.json     # UI dependencies
+├── packages/
+│   └── plugin-sdk/        # Plugin development kit
+├── scripts/
+│   ├── build.sh          # Production build script
+│   └── dev.sh            # Development script
+└── package.json          # Root workspace config
+```
+
+### Building the Go Core
+
+The Go core must be compiled for your platform before running Tauri.
+
+<CodeGroup>
+```bash Manual Build
+# Navigate to core directory
+cd apps/desktop/core
+
+# Build for your platform
+go build -ldflags="-s -w" -o ../src-tauri/binaries/apicore-<TARGET> ./cmd/apicore
+```
+
+```bash Using pnpm Script
+# From project root
+pnpm build:core
+```
+
+```bash Using dev.sh
+# Automatically detects platform and builds
+./scripts/dev.sh
+```
+</CodeGroup>
+
+**Target triple mapping:**
+
+| Platform | Architecture | Target Triple |
+|----------|--------------|---------------|
+| macOS | Apple Silicon (M1/M2/M3) | `aarch64-apple-darwin` |
+| macOS | Intel | `x86_64-apple-darwin` |
+| Linux | x86_64 | `x86_64-unknown-linux-gnu` |
+| Linux | ARM64 | `aarch64-unknown-linux-gnu` |
+| Windows | x86_64 | `x86_64-pc-windows-msvc.exe` |
+
+<Info>
+The `-ldflags="-s -w"` flags strip debug information and reduce binary size by ~30%.
+</Info>
+
+### Cross-Compiling Go Binaries
+
+You can build for multiple platforms from a single machine:
+
+```bash
+# Build for macOS ARM64 from Linux
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build \
+  -ldflags="-s -w" \
+  -o binaries/apicore-aarch64-apple-darwin \
+  ./cmd/apicore
+
+# Build for Linux AMD64 from macOS
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+  -ldflags="-s -w" \
+  -o binaries/apicore-x86_64-unknown-linux-gnu \
+  ./cmd/apicore
+
+# Build for Windows from macOS/Linux
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build \
+  -ldflags="-s -w" \
+  -o binaries/apicore-x86_64-pc-windows-msvc.exe \
+  ./cmd/apicore
+```
+
+<Note>
+CGO is disabled (`CGO_ENABLED=0`) to enable pure Go cross-compilation without requiring platform-specific C compilers.
+</Note>
+
+### Building the Frontend
+
+The SolidJS UI is compiled with Vite:
+
+```bash
+# Development build with watch mode
+cd apps/desktop/ui
+pnpm dev
+
+# Production build
+pnpm build
+```
+
+**Build artifacts:**
+- Development: Served from Vite dev server at `http://localhost:5173`
+- Production: Output to `apps/desktop/ui/dist/`
+
+### Building the Tauri App
+
+<Tabs>
+  <Tab title="Development Mode">
+    ```bash
+    # From project root
+    pnpm dev
+    
+    # Or explicitly
+    cd apps/desktop/ui
+    pnpm tauri dev
+    ```
+    
+    **What happens:**
+    1. Vite dev server starts on port 5173
+    2. Tauri builds Rust code in debug mode
+    3. Spawns the Go sidecar binary
+    4. Opens the app window loading from Vite dev server
+    5. Hot reload enabled for UI changes
+  </Tab>
+  
+  <Tab title="Production Build">
+    ```bash
+    # From project root
+    pnpm build
+    
+    # Or using the build script
+    ./scripts/build.sh
+    ```
+    
+    **What happens:**
+    1. Builds Go core for current platform
+    2. Compiles UI to static files
+    3. Builds Tauri in release mode
+    4. Creates platform-specific installers
+  </Tab>
+</Tabs>
+
+### Production Build Script
+
+The `scripts/build.sh` script handles the complete build process:
+
+```bash
+# Build for current platform only
+./scripts/build.sh
+
+# Build for all platforms (requires cross-compilation setup)
+./scripts/build.sh --all
+```
+
+<Accordion title="What the build script does">
+1. **Detects platform** - Identifies current OS and architecture
+2. **Builds Go core** - Compiles binaries for target platforms
+3. **Builds UI** - Runs `pnpm build` to create production assets
+4. **Builds Tauri** - Creates installers/bundles
+5. **Outputs artifacts** to platform-specific locations
+</Accordion>
+
+**Output locations:**
+
+<Tabs>
+  <Tab title="macOS">
+    ```
+    apps/desktop/src-tauri/target/release/bundle/
+    ├── dmg/
+    │   ├── Eru_aarch64.dmg      # Apple Silicon
+    │   └── Eru_x64.dmg          # Intel
+    └── macos/
+        └── Eru.app              # Unsigned app bundle
+    ```
+  </Tab>
+  
+  <Tab title="Linux">
+    ```
+    apps/desktop/src-tauri/target/release/bundle/
+    ├── deb/
+    │   └── Eru_amd64.deb
+    ├── appimage/
+    │   └── Eru_amd64.AppImage
+    └── rpm/
+        └── Eru.rpm
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    ```
+    apps\desktop\src-tauri\target\release\bundle\
+    └── msi\
+        ├── Eru_x64_en-US.msi
+        └── Eru_x64-setup.exe
+    ```
+  </Tab>
+</Tabs>
+
+## Development Workflow
+
+### Recommended Setup
+
+<Steps>
+  <Step title="Terminal 1: Backend development">
+    ```bash
+    # Watch Go files and rebuild on changes
+    cd apps/desktop/core
+    
+    # Use a file watcher like 'air' or 'reflex'
+    go install github.com/cosmtrek/air@latest
+    air
+    ```
+  </Step>
+  
+  <Step title="Terminal 2: Frontend development">
+    ```bash
+    # Start Tauri dev mode (includes Vite HMR)
+    pnpm dev
+    ```
+  </Step>
+</Steps>
+
+### Testing Changes
+
+<CardGroup cols={2}>
+  <Card title="UI Changes" icon="paintbrush">
+    **Hot reload enabled** - Changes appear instantly
+    
+    Modify files in `apps/desktop/ui/src/`
+  </Card>
+  
+  <Card title="Rust Changes" icon="rust">
+    **Requires restart** - Kill and restart `pnpm dev`
+    
+    Modify files in `apps/desktop/src-tauri/src/`
+  </Card>
+  
+  <Card title="Go Changes" icon="golang">
+    **Rebuild required**
+    ```bash
+    pnpm build:core
+    # Then restart pnpm dev
+    ```
+  </Card>
+  
+  <Card title="Config Changes" icon="gear">
+    **Full rebuild required**
+    
+    Changes to `tauri.conf.json`, `package.json`
+  </Card>
+</CardGroup>
+
+### Running Tests
+
+```bash
+# Go tests
+cd apps/desktop/core
+go test ./...
+
+# Test specific package
+go test ./internal/engine -v
+
+# Run with coverage
+go test -cover ./...
+```
+
+<Info>
+Currently, UI tests are not implemented. Contributions welcome!
+</Info>
+
+## Troubleshooting
+
+### Common Issues
+
+<Accordion title="Go binary not found">
+  **Error:** `Could not find sidecar binary 'apicore-xxx'`
+  
+  **Solution:**
+  ```bash
+  # Ensure Go binary is built
+  pnpm build:core
+  
+  # Verify it exists
+  ls -la apps/desktop/src-tauri/binaries/
+  
+  # Should see: apicore-<your-platform>
+  ```
+</Accordion>
+
+<Accordion title="Tauri build fails on Linux">
+  **Error:** `webkit2gtk-4.1 not found`
+  
+  **Solution:**
+  ```bash
+  # Install missing dependencies
+  sudo apt-get install -y libwebkit2gtk-4.1-dev
+  ```
+  
+  See [Platform-Specific Requirements](#platform-specific-requirements) for full list.
+</Accordion>
+
+<Accordion title="pnpm install fails">
+  **Error:** `No matching version found for @tauri-apps/cli`
+  
+  **Solution:**
+  ```bash
+  # Clear pnpm cache
+  pnpm store prune
+  
+  # Retry installation
+  pnpm install --force
+  ```
+</Accordion>
+
+<Accordion title="Go build fails with 'cannot find package'">
+  **Error:** `package github.com/api-client/core/internal/engine: cannot find package`
+  
+  **Solution:**
+  ```bash
+  # Ensure you're in the correct directory
+  cd apps/desktop/core
+  
+  # Download dependencies
+  go mod download
+  
+  # Verify go.mod is present
+  ls -la go.mod
+  ```
+</Accordion>
+
+<Accordion title="Port 5173 already in use">
+  **Error:** `Port 5173 is already in use`
+  
+  **Solution:**
+  ```bash
+  # Kill existing Vite process
+  lsof -ti:5173 | xargs kill -9
+  
+  # Or change port in vite.config.ts
+  ```
+</Accordion>
+
+<Accordion title="macOS: App is damaged">
+  **Error:** "Eru.app is damaged and can't be opened"
+  
+  **Solution:**
+  ```bash
+  # Clear quarantine attributes
+  xattr -cr apps/desktop/src-tauri/target/release/bundle/macos/Eru.app
+  
+  # Or for installed app
+  xattr -cr /Applications/Eru.app
+  ```
+</Accordion>
+
+<Accordion title="Windows: MSVC not found">
+  **Error:** `link.exe not found`
+  
+  **Solution:**
+  1. Install Visual Studio 2022 Build Tools
+  2. Select "Desktop development with C++" workload
+  3. Restart terminal to reload PATH
+  4. Verify: `where link.exe`
+</Accordion>
+
+### Debug Mode
+
+Enable verbose logging for troubleshooting:
+
+```bash
+# Tauri debug logs
+RUST_LOG=debug pnpm dev
+
+# Go core logs (stderr is forwarded to Tauri)
+# Logs appear in terminal running 'pnpm dev'
+```
+
+### Clean Build
+
+If you encounter persistent issues, try a clean rebuild:
+
+```bash
+# Clean all build artifacts
+rm -rf node_modules
+rm -rf apps/desktop/ui/node_modules
+rm -rf apps/desktop/ui/dist
+rm -rf apps/desktop/src-tauri/target
+rm -rf apps/desktop/src-tauri/binaries
+
+# Reinstall and rebuild
+pnpm install
+pnpm build:core
+pnpm dev
+```
+
+## Building for Distribution
+
+### Code Signing (macOS)
+
+To distribute on macOS without Gatekeeper warnings:
+
+<Steps>
+  <Step title="Obtain Apple Developer Certificate">
+    Enroll in [Apple Developer Program](https://developer.apple.com/programs/) ($99/year)
+  </Step>
+  
+  <Step title="Configure signing in tauri.conf.json">
+    ```json
+    {
+      "bundle": {
+        "macOS": {
+          "signingIdentity": "Developer ID Application: Your Name (TEAM_ID)"
+        }
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Build with signing">
+    ```bash
+    pnpm tauri build
+    ```
+  </Step>
+  
+  <Step title="Notarize with Apple">
+    ```bash
+    # Submit for notarization
+    xcrun notarytool submit Eru.dmg \
+      --apple-id your@email.com \
+      --team-id TEAM_ID \
+      --password app-specific-password
+    ```
+  </Step>
+</Steps>
+
+<Note>
+The current public releases are not code-signed. Users must bypass Gatekeeper using the instructions in the README.
+</Note>
+
+### Creating Installers
+
+Tauri automatically creates platform-specific installers:
+
+- **macOS**: `.dmg` disk image
+- **Windows**: `.msi` installer + `.exe` setup
+- **Linux**: `.deb`, `.AppImage`, `.rpm`
+
+No additional configuration needed for basic installers.
+
+## Performance Tips
+
+<Tip>
+**Speed up builds:**
+
+1. **Use pnpm's frozen lockfile:**
+   ```bash
+   pnpm install --frozen-lockfile
+   ```
+
+2. **Cache Go dependencies:**
+   ```bash
+   go env -w GOCACHE=/path/to/persistent/cache
+   ```
+
+3. **Enable Rust incremental compilation:**
+   ```bash
+   export CARGO_INCREMENTAL=1
+   ```
+
+4. **Use more CPU cores:**
+   ```bash
+   export GOMAXPROCS=8  # Adjust to your CPU
+   ```
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/development/architecture">
+    Learn about Eru's three-layer architecture
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/development/contributing">
+    Start contributing to the project
+  </Card>
+</CardGroup>

@@ -1,0 +1,793 @@
+---
+title: Requests
+description: Create, configure, and execute HTTP requests with comprehensive support for methods, headers, body types, and authentication
+---
+
+## Overview
+
+Requests are the core building blocks of Eru. Each request represents a single HTTP operation with configurable method, URL, headers, body, and authentication.
+
+<Info>
+Requests are stored as JSON files in `~/.api-client/data/requests/` and automatically saved when modified.
+</Info>
+
+## Request Structure
+
+Each request in Eru has the following properties:
+
+<ParamField path="id" type="string" required>
+  Unique identifier (auto-generated UUID)
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Display name for the request
+</ParamField>
+
+<ParamField path="method" type="HTTPMethod" required>
+  HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`
+</ParamField>
+
+<ParamField path="url" type="string" required>
+  Complete URL including protocol, domain, path, and query parameters
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>">
+  Key-value pairs of HTTP headers
+</ParamField>
+
+<ParamField path="body" type="string">
+  Request body content (for POST, PUT, PATCH)
+</ParamField>
+
+<ParamField path="bodyType" type="BodyType">
+  Body content type: `none`, `json`, `text`, `form-urlencoded`, or `multipart`
+</ParamField>
+
+<ParamField path="formFields" type="FormField[]">
+  Array of form fields for `form-urlencoded` and `multipart` requests
+</ParamField>
+
+<ParamField path="auth" type="AuthConfig">
+  Authentication configuration
+</ParamField>
+
+<ParamField path="collectionId" type="string">
+  Parent collection ID (empty for uncategorized requests)
+</ParamField>
+
+<ParamField path="description" type="string">
+  Markdown documentation for the request
+</ParamField>
+
+### Example Request JSON
+
+```json
+{
+  "id": "req-7c9e6679-7425-40de-944b",
+  "name": "Create User",
+  "method": "POST",
+  "url": "https://api.example.com/v1/users",
+  "headers": {
+    "Content-Type": "application/json",
+    "X-API-Version": "2024-01"
+  },
+  "body": "{\"username\": \"john_doe\", \"email\": \"john@example.com\"}",
+  "bodyType": "json",
+  "auth": {
+    "type": "bearer",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  },
+  "collectionId": "users-collection-id",
+  "description": "# Create New User\n\nCreates a new user account."
+}
+```
+
+## HTTP Methods
+
+Eru supports all standard HTTP methods:
+
+<CodeGroup>
+```go Type Definition
+// From: apps/desktop/core/pkg/types/types.go:5-14
+type HTTPMethod string
+
+const (
+    MethodGet    HTTPMethod = "GET"
+    MethodPost   HTTPMethod = "POST"
+    MethodPut    HTTPMethod = "PUT"
+    MethodDelete HTTPMethod = "DELETE"
+    MethodPatch  HTTPMethod = "PATCH"
+)
+```
+
+```typescript Usage
+const request: Request = {
+  id: uuid(),
+  name: "Get User",
+  method: "GET",
+  url: "{{baseUrl}}/users/{{userId}}",
+  headers: {},
+  collectionId: "users"
+};
+```
+</CodeGroup>
+
+<CardGroup cols={2}>
+  <Card title="GET" icon="download">
+    Retrieve data from the server. No request body.
+    
+    ```bash
+    GET /api/users/123
+    ```
+  </Card>
+  
+  <Card title="POST" icon="upload">
+    Create new resources. Includes request body.
+    
+    ```bash
+    POST /api/users
+    Body: {"name": "John"}
+    ```
+  </Card>
+  
+  <Card title="PUT" icon="rotate">
+    Update entire resources. Replaces existing data.
+    
+    ```bash
+    PUT /api/users/123
+    Body: {"name": "John", "email": "john@example.com"}
+    ```
+  </Card>
+  
+  <Card title="PATCH" icon="wrench">
+    Partially update resources. Modifies specific fields.
+    
+    ```bash
+    PATCH /api/users/123
+    Body: {"email": "newemail@example.com"}
+    ```
+  </Card>
+  
+  <Card title="DELETE" icon="trash">
+    Remove resources from the server.
+    
+    ```bash
+    DELETE /api/users/123
+    ```
+  </Card>
+</CardGroup>
+
+## Headers
+
+Headers are key-value pairs sent with every request:
+
+### Common Headers
+
+<Tabs>
+  <Tab title="Content-Type">
+    Specifies the media type of the request body:
+    
+    ```json
+    {
+      "Content-Type": "application/json"
+    }
+    ```
+    
+    Common values:
+    - `application/json` - JSON data
+    - `application/x-www-form-urlencoded` - Form data
+    - `multipart/form-data` - File uploads
+    - `text/plain` - Plain text
+    - `text/xml` - XML data
+  </Tab>
+  
+  <Tab title="Authorization">
+    Contains authentication credentials:
+    
+    ```json
+    {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+    
+    <Note>
+    Eru's authentication system automatically sets this header based on the `auth` configuration.
+    </Note>
+  </Tab>
+  
+  <Tab title="Accept">
+    Specifies expected response media types:
+    
+    ```json
+    {
+      "Accept": "application/json"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Custom Headers">
+    API-specific headers:
+    
+    ```json
+    {
+      "X-API-Key": "{{apiKey}}",
+      "X-Request-ID": "{{requestId}}",
+      "X-Client-Version": "1.0.0"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Header Implementation
+
+```go
+// From: apps/desktop/core/internal/engine/engine.go:194-202
+// Set headers from request
+for key, value := range req.Headers {
+    httpReq.Header.Set(key, value)
+}
+
+// Set Content-Type if not already set and we have a body
+if bodyReader != nil && httpReq.Header.Get("Content-Type") == "" && contentType != "" {
+    httpReq.Header.Set("Content-Type", contentType)
+}
+```
+
+## Body Types
+
+Eru supports multiple request body formats:
+
+<Tabs>
+  <Tab title="JSON">
+    ### JSON Body
+    
+    Most common for REST APIs:
+    
+    ```json
+    {
+      "username": "john_doe",
+      "email": "john@example.com",
+      "age": 30,
+      "active": true,
+      "roles": ["user", "admin"],
+      "metadata": {
+        "created": "2024-01-15",
+        "source": "api"
+      }
+    }
+    ```
+    
+    **Features:**
+    - Syntax highlighting in the editor
+    - Automatic validation
+    - Variable interpolation with smart quoting
+    - Pretty formatting
+    
+    ```typescript
+    // From types definition
+    bodyType: "json"
+    body: JSON.stringify({ username: "john_doe" })
+    ```
+  </Tab>
+  
+  <Tab title="Form URL-Encoded">
+    ### Form URL-Encoded
+    
+    Traditional HTML form submission format:
+    
+    ```go
+    // From: apps/desktop/core/internal/engine/engine.go:389-399
+    func (e *engine) buildFormURLEncodedBody(fields []types.FormField) string {
+        values := url.Values{}
+        for _, field := range fields {
+            if !field.Enabled || field.Type == "file" {
+                continue // Skip disabled fields and file fields
+            }
+            values.Add(field.Key, field.Value)
+        }
+        return values.Encode()
+    }
+    ```
+    
+    **Form Fields:**
+    
+    ```typescript
+    formFields: [
+      { key: "username", value: "john_doe", enabled: true, type: "text" },
+      { key: "password", value: "{{password}}", enabled: true, type: "text" },
+      { key: "remember", value: "true", enabled: true, type: "text" }
+    ]
+    ```
+    
+    Results in:
+    ```
+    username=john_doe&password=secret123&remember=true
+    ```
+  </Tab>
+  
+  <Tab title="Multipart">
+    ### Multipart Form Data
+    
+    For file uploads and mixed content:
+    
+    ```typescript
+    // From types definition
+    interface FormField {
+      id: string;
+      key: string;
+      value: string;     // File path for file fields
+      type: "text" | "file";
+      enabled: boolean;
+      fileName?: string; // Original filename for file fields
+    }
+    ```
+    
+    **Example:**
+    
+    ```typescript
+    formFields: [
+      { key: "description", value: "Profile photo", type: "text", enabled: true },
+      { key: "avatar", value: "/path/to/photo.jpg", type: "file", enabled: true, fileName: "photo.jpg" }
+    ]
+    ```
+    
+    **Implementation:**
+    
+    ```go
+    // From: apps/desktop/core/internal/engine/engine.go:331-387
+    func (e *engine) buildMultipartBody(fields []types.FormField) (io.Reader, string, error) {
+        var buf bytes.Buffer
+        writer := multipart.NewWriter(&buf)
+
+        for _, field := range fields {
+            if !field.Enabled {
+                continue
+            }
+
+            if field.Type == "file" {
+                // Handle file field
+                file, err := os.Open(field.Value)
+                if err != nil {
+                    return nil, "", fmt.Errorf("failed to open file %s: %w", field.Value, err)
+                }
+                
+                filename := field.FileName
+                if filename == "" {
+                    filename = filepath.Base(field.Value)
+                }
+                
+                part, err := writer.CreateFormFile(field.Key, filename)
+                if err != nil {
+                    file.Close()
+                    return nil, "", fmt.Errorf("failed to create form file: %w", err)
+                }
+                
+                _, err = io.Copy(part, file)
+                file.Close()
+                if err != nil {
+                    return nil, "", fmt.Errorf("failed to copy file content: %w", err)
+                }
+            } else {
+                // Handle text field
+                err := writer.WriteField(field.Key, field.Value)
+                if err != nil {
+                    return nil, "", fmt.Errorf("failed to write field %s: %w", field.Key, err)
+                }
+            }
+        }
+
+        err := writer.Close()
+        if err != nil {
+            return nil, "", fmt.Errorf("failed to close multipart writer: %w", err)
+        }
+
+        return &buf, writer.FormDataContentType(), nil
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Text">
+    ### Plain Text
+    
+    For raw text data:
+    
+    ```typescript
+    bodyType: "text"
+    body: "Plain text content\nLine 2\nLine 3"
+    ```
+    
+    Sets `Content-Type: text/plain`
+  </Tab>
+  
+  <Tab title="None">
+    ### No Body
+    
+    For GET, DELETE, or requests without body:
+    
+    ```typescript
+    bodyType: "none"
+    body: undefined
+    ```
+  </Tab>
+</Tabs>
+
+## Authentication
+
+Eru supports multiple authentication methods:
+
+<Tabs>
+  <Tab title="Bearer Token">
+    ### Bearer Token Authentication
+    
+    Most common for modern APIs (JWT, OAuth):
+    
+    ```typescript
+    auth: {
+      type: "bearer",
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+    
+    Automatically adds header:
+    ```
+    Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    ```
+    
+    **With Environment Variables:**
+    ```typescript
+    auth: {
+      type: "bearer",
+      token: "{{authToken}}"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Basic Auth">
+    ### Basic Authentication
+    
+    Username and password encoded in Base64:
+    
+    ```typescript
+    auth: {
+      type: "basic",
+      username: "admin",
+      password: "{{password}}"
+    }
+    ```
+    
+    Automatically adds header:
+    ```
+    Authorization: Basic YWRtaW46cGFzc3dvcmQ=
+    ```
+  </Tab>
+  
+  <Tab title="API Key">
+    ### API Key Authentication
+    
+    Custom header or query parameter:
+    
+    **Header-based:**
+    ```typescript
+    auth: {
+      type: "apikey",
+      apiKeyName: "X-API-Key",
+      apiKeyValue: "{{apiKey}}",
+      apiKeyLocation: "header"
+    }
+    ```
+    
+    **Query-based:**
+    ```typescript
+    auth: {
+      type: "apikey",
+      apiKeyName: "api_key",
+      apiKeyValue: "{{apiKey}}",
+      apiKeyLocation: "query"
+    }
+    ```
+    
+    Results in: `https://api.example.com/users?api_key=your-key-here`
+  </Tab>
+  
+  <Tab title="None">
+    ### No Authentication
+    
+    For public endpoints:
+    
+    ```typescript
+    auth: {
+      type: "none"
+    }
+    // or
+    auth: undefined
+    ```
+  </Tab>
+</Tabs>
+
+**Auth Type Definition:**
+
+```go
+// From: apps/desktop/core/pkg/types/types.go:37-55
+type AuthType string
+
+const (
+    AuthTypeNone   AuthType = "none"
+    AuthTypeBasic  AuthType = "basic"
+    AuthTypeBearer AuthType = "bearer"
+    AuthTypeAPIKey AuthType = "apikey"
+)
+
+type AuthConfig struct {
+    Type           AuthType `json:"type"`
+    Username       string   `json:"username,omitempty"`       // Basic Auth
+    Password       string   `json:"password,omitempty"`       // Basic Auth
+    Token          string   `json:"token,omitempty"`          // Bearer Token
+    APIKeyName     string   `json:"apiKeyName,omitempty"`     // API Key
+    APIKeyValue    string   `json:"apiKeyValue,omitempty"`    // API Key
+    APIKeyLocation string   `json:"apiKeyLocation,omitempty"` // "header" or "query"
+}
+```
+
+## Executing Requests
+
+Requests are executed through the engine with full lifecycle management:
+
+### Execution Flow
+
+<Steps>
+  <Step title="Pre-Request Plugins" icon="plug">
+    Plugins can modify the request before execution (add headers, transform body, etc.)
+  </Step>
+  
+  <Step title="HTTP Execution" icon="bolt">
+    The engine creates and sends the HTTP request with detailed timing tracking
+  </Step>
+  
+  <Step title="Post-Response Plugins" icon="filter">
+    Plugins can process the response (validate, extract data, etc.)
+  </Step>
+  
+  <Step title="Response Return" icon="check">
+    Final response is returned with status, headers, body, and timing data
+  </Step>
+</Steps>
+
+**Implementation:**
+
+```go
+// From: apps/desktop/core/internal/engine/engine.go:99-137
+func (e *engine) ExecuteWithContext(ctx context.Context, req *types.Request) (*types.Response, error) {
+    // Create cancellable context for this request
+    ctx, cancel := context.WithCancel(ctx)
+    defer cancel()
+
+    // Track the request for potential cancellation
+    e.trackRequest(req.ID, cancel)
+    defer e.untrackRequest(req.ID)
+
+    // Step 1: Run pre-request plugins
+    pluginCtx := &plugins.Context{
+        Request: req,
+    }
+
+    pluginCtx, err := e.plugins.Execute(plugins.HookPreRequest, pluginCtx)
+    if err != nil {
+        return nil, fmt.Errorf("pre-request plugin error: %w", err)
+    }
+
+    // Use potentially modified request from plugins
+    req = pluginCtx.Request
+
+    // Step 2: Execute HTTP request
+    resp, err := e.executeHTTP(ctx, req)
+    if err != nil {
+        return nil, fmt.Errorf("HTTP execution error: %w", err)
+    }
+
+    // Step 3: Run post-response plugins
+    pluginCtx.Response = resp
+    pluginCtx, err = e.plugins.Execute(plugins.HookPostResponse, pluginCtx)
+    if err != nil {
+        return nil, fmt.Errorf("post-response plugin error: %w", err)
+    }
+
+    // Return potentially modified response from plugins
+    return pluginCtx.Response, nil
+}
+```
+
+### Cancel In-Flight Requests
+
+```typescript
+// Start a request
+const requestPromise = ipc.call("request.execute", request);
+
+// Cancel it before completion
+await ipc.call("request.cancel", { id: request.id });
+```
+
+```go
+// From: apps/desktop/core/internal/engine/engine.go:401-413
+func (e *engine) Cancel(requestID string) error {
+    e.inFlightMu.RLock()
+    cancel, exists := e.inFlight[requestID]
+    e.inFlightMu.RUnlock()
+
+    if !exists {
+        return fmt.Errorf("request %s not found or already completed", requestID)
+    }
+
+    cancel()
+    return nil
+}
+```
+
+## Response Structure
+
+Every executed request returns a detailed response:
+
+```typescript
+interface Response {
+  statusCode: number;        // HTTP status code (200, 404, etc.)
+  status: string;            // HTTP status text ("200 OK", "404 Not Found")
+  headers: Record<string, string>;
+  body: string;              // Response body as string
+  bodyBase64?: boolean;      // True if body is base64-encoded (binary)
+  duration: number;          // Total duration in milliseconds
+  timing?: Timing;           // Detailed timing breakdown
+}
+```
+
+### Response Timing
+
+Eru provides detailed performance metrics:
+
+```typescript
+interface Timing {
+  dnsLookup: number;    // DNS resolution time in ms
+  tcpConnect: number;   // TCP connection time in ms
+  tlsHandshake: number; // TLS handshake time in ms (0 for HTTP)
+  firstByte: number;    // Time to first byte (TTFB) in ms
+  download: number;     // Content download time in ms
+  total: number;        // Total request time in ms
+}
+```
+
+**Timing Implementation:**
+
+```go
+// From: apps/desktop/core/internal/engine/engine.go:208-231
+trace := &httptrace.ClientTrace{
+    DNSStart: func(info httptrace.DNSStartInfo) {
+        timing.dnsStart = time.Now()
+    },
+    DNSDone: func(info httptrace.DNSDoneInfo) {
+        timing.dnsDone = time.Now()
+    },
+    ConnectStart: func(network, addr string) {
+        timing.connectStart = time.Now()
+    },
+    ConnectDone: func(network, addr string, err error) {
+        timing.connectDone = time.Now()
+    },
+    TLSHandshakeStart: func() {
+        timing.tlsStart = time.Now()
+    },
+    TLSHandshakeDone: func(state tls.ConnectionState, err error) {
+        timing.tlsDone = time.Now()
+    },
+    GotFirstResponseByte: func() {
+        timing.firstByteReceived = time.Now()
+    },
+}
+```
+
+### Binary Response Handling
+
+Binary responses (images, PDFs, etc.) are automatically base64-encoded:
+
+```go
+// From: apps/desktop/core/internal/engine/engine.go:308-318
+respContentType := httpResp.Header.Get("Content-Type")
+isBinary := isBinaryContentType(respContentType)
+var bodyStr string
+var isBase64 bool
+if isBinary && len(body) > 0 {
+    bodyStr = base64.StdEncoding.EncodeToString(body)
+    isBase64 = true
+} else {
+    bodyStr = string(body)
+}
+```
+
+**Binary Content Types:**
+- `image/*` (image/png, image/jpeg, etc.)
+- `audio/*`
+- `video/*`
+- `application/pdf`
+- `application/octet-stream`
+- `application/zip`
+
+## Saving Responses
+
+Save responses for comparison and regression testing:
+
+```typescript
+const savedResponse = await ipc.call("response.save", {
+  requestId: "req-id",
+  name: "Baseline Response",
+  response: response,
+  isBaseline: true,
+  environmentId: "prod-env"
+});
+
+// Later, compare with a new response
+const diff = await ipc.call("diff.compute", {
+  leftId: savedResponse.id,
+  rightId: newSavedResponse.id,
+  ignorePaths: ["timestamp", "requestId"]
+});
+```
+
+See [Response Comparison](/advanced/response-diff) for details.
+
+## Request API Reference
+
+### Execute Request
+
+```typescript
+const response = await ipc.call("request.execute", request);
+```
+
+### List Requests
+
+```typescript
+const requests = await ipc.call("request.list");
+```
+
+### Get Request
+
+```typescript
+const request = await ipc.call("request.get", { id: "req-id" });
+```
+
+### Save Request
+
+```typescript
+await ipc.call("request.save", {
+  id: "req-id",
+  name: "Updated Request",
+  method: "POST",
+  url: "https://api.example.com/users",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ username: "john" }),
+  bodyType: "json",
+  collectionId: "collection-id"
+});
+```
+
+### Delete Request
+
+```typescript
+await ipc.call("request.delete", { id: "req-id" });
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Workflows" icon="diagram-project" href="/features/workflows">
+    Chain multiple requests together with variable extraction
+  </Card>
+  
+  <Card title="Environments" icon="globe" href="/features/environments">
+    Use variables in requests for different contexts
+  </Card>
+  
+  <Card title="Collections" icon="folder" href="/features/collections">
+    Organize requests into logical groups
+  </Card>
+  
+  <Card title="Plugins" icon="plug" href="/advanced/plugins">
+    Extend request functionality with custom plugins
+  </Card>
+</CardGroup>

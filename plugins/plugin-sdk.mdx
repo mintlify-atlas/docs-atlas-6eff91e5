@@ -1,0 +1,749 @@
+---
+title: Plugin SDK Reference
+description: Complete API reference for building Eru plugins with TypeScript
+---
+
+The Eru Plugin SDK provides TypeScript types and utilities for building type-safe plugins. This reference covers all available APIs, types, and helper functions.
+
+## Installation
+
+Install the plugin SDK from npm:
+
+<CodeGroup>
+```bash npm
+npm install @api-client/plugin-sdk
+```
+
+```bash pnpm
+pnpm add @api-client/plugin-sdk
+```
+
+```bash yarn
+yarn add @api-client/plugin-sdk
+```
+</CodeGroup>
+
+## TypeScript Setup
+
+Create a TypeScript plugin project:
+
+<Steps>
+  <Step title="Initialize Project">
+    ```bash
+    mkdir my-plugin
+    cd my-plugin
+    npm init -y
+    npm install @api-client/plugin-sdk typescript
+    ```
+  </Step>
+
+  <Step title="Configure TypeScript">
+    Create `tsconfig.json`:
+
+    ```json tsconfig.json
+    {
+      "compilerOptions": {
+        "target": "ES2020",
+        "module": "CommonJS",
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
+      },
+      "include": ["src/**/*"],
+      "exclude": ["node_modules"]
+    }
+    ```
+  </Step>
+
+  <Step title="Create Plugin Entry Point">
+    Create `src/index.ts`:
+
+    ```typescript src/index.ts
+    import { definePlugin } from '@api-client/plugin-sdk';
+
+    export default definePlugin({
+      onPreRequest(ctx) {
+        ctx.log.info('Plugin executed');
+        return { request: ctx.request };
+      }
+    });
+    ```
+  </Step>
+
+  <Step title="Add Build Script">
+    Update `package.json`:
+
+    ```json package.json
+    {
+      "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Core Types
+
+### Request
+
+Represents an API request that can be modified by plugins.
+
+<ParamField path="id" type="string">
+  Unique identifier for the request.
+</ParamField>
+
+<ParamField path="method" type="HTTPMethod">
+  HTTP method: `"GET"`, `"POST"`, `"PUT"`, `"DELETE"`, or `"PATCH"`.
+</ParamField>
+
+<ParamField path="url" type="string">
+  Full URL including protocol, domain, path, and query parameters.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>">
+  Request headers as key-value pairs.
+</ParamField>
+
+<ParamField path="body" type="string | undefined">
+  Request body (for POST, PUT, PATCH methods). May be JSON, plain text, or form data.
+</ParamField>
+
+<ParamField path="collectionId" type="string | undefined">
+  ID of the collection this request belongs to, if any.
+</ParamField>
+
+```typescript
+interface Request {
+  id: string;
+  method: HTTPMethod;
+  url: string;
+  headers: Record<string, string>;
+  body?: string;
+  collectionId?: string;
+}
+
+type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+```
+
+### Response
+
+Represents an API response received after request execution.
+
+<ParamField path="statusCode" type="number">
+  HTTP status code (e.g., 200, 404, 500).
+</ParamField>
+
+<ParamField path="status" type="string">
+  HTTP status text (e.g., "OK", "Not Found", "Internal Server Error").
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>">
+  Response headers as key-value pairs.
+</ParamField>
+
+<ParamField path="body" type="string">
+  Response body as a string. May contain JSON, HTML, plain text, etc.
+</ParamField>
+
+<ParamField path="duration" type="number">
+  Request duration in milliseconds from start to completion.
+</ParamField>
+
+```typescript
+interface Response {
+  statusCode: number;
+  status: string;
+  headers: Record<string, string>;
+  body: string;
+  duration: number;
+}
+```
+
+### Environment
+
+Represents environment variables available to the request.
+
+<ParamField path="name" type="string">
+  Name of the active environment (e.g., "Development", "Production").
+</ParamField>
+
+<ParamField path="variables" type="Record<string, string>">
+  Key-value pairs of environment variables that can be interpolated in requests.
+</ParamField>
+
+```typescript
+interface Environment {
+  name: string;
+  variables: Record<string, string>;
+}
+```
+
+## Plugin Types
+
+### PluginManifest
+
+Defines plugin metadata and configuration.
+
+<ParamField path="id" type="string" required>
+  Unique plugin identifier (e.g., "oauth-helper").
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Human-readable plugin name (e.g., "OAuth Helper").
+</ParamField>
+
+<ParamField path="version" type="string" required>
+  Semantic version following semver (e.g., "1.0.0").
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Brief description of plugin functionality.
+</ParamField>
+
+<ParamField path="permissions" type="Permission[]" required>
+  Array of required permissions: `["network", "file:read"]`.
+</ParamField>
+
+<ParamField path="main" type="string" required>
+  Entry point file relative to manifest (e.g., "index.js").
+</ParamField>
+
+```typescript
+interface PluginManifest {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  permissions: Permission[];
+  main: string;
+}
+
+type Permission = "network" | "file:read";
+```
+
+### PluginContext
+
+Context object passed to plugin hooks containing all available data and utilities.
+
+<ParamField path="request" type="Request">
+  Current request object. Can be modified in `onPreRequest` hook.
+</ParamField>
+
+<ParamField path="response" type="Response | undefined">
+  Current response object. Only available in `onPostResponse` hook.
+</ParamField>
+
+<ParamField path="environment" type="Environment | undefined">
+  Active environment and its variables, if any.
+</ParamField>
+
+<ParamField path="storage" type="PluginStorage">
+  Persistent storage interface for plugin data.
+</ParamField>
+
+<ParamField path="log" type="PluginLogger">
+  Logging interface for plugin messages.
+</ParamField>
+
+```typescript
+interface PluginContext {
+  request: Request;
+  response?: Response;
+  environment?: Environment;
+  storage: PluginStorage;
+  log: PluginLogger;
+}
+```
+
+### PluginStorage
+
+Provides persistent key-value storage for plugins.
+
+<ResponseField name="get" type="<T>(key: string) => T | undefined">
+  Retrieve a value from storage. Returns `undefined` if key doesn't exist.
+
+  ```typescript
+  const token = ctx.storage.get<string>('auth-token');
+  ```
+</ResponseField>
+
+<ResponseField name="set" type="<T>(key: string, value: T) => void">
+  Store a value. Overwrites existing value if key exists.
+
+  ```typescript
+  ctx.storage.set('auth-token', 'eyJhbGc...');
+  ```
+</ResponseField>
+
+<ResponseField name="delete" type="(key: string) => void">
+  Remove a key-value pair from storage.
+
+  ```typescript
+  ctx.storage.delete('auth-token');
+  ```
+</ResponseField>
+
+<ResponseField name="clear" type="() => void">
+  Remove all data from storage.
+
+  ```typescript
+  ctx.storage.clear();
+  ```
+</ResponseField>
+
+```typescript
+interface PluginStorage {
+  get<T = unknown>(key: string): T | undefined;
+  set<T = unknown>(key: string, value: T): void;
+  delete(key: string): void;
+  clear(): void;
+}
+```
+
+### PluginLogger
+
+Provides logging capabilities with different severity levels.
+
+<ResponseField name="info" type="(message: string, ...args: unknown[]) => void">
+  Log informational messages.
+
+  ```typescript
+  ctx.log.info('Processing request', ctx.request.url);
+  ```
+</ResponseField>
+
+<ResponseField name="warn" type="(message: string, ...args: unknown[]) => void">
+  Log warnings.
+
+  ```typescript
+  ctx.log.warn('Missing header', 'Authorization');
+  ```
+</ResponseField>
+
+<ResponseField name="error" type="(message: string, ...args: unknown[]) => void">
+  Log errors.
+
+  ```typescript
+  ctx.log.error('Failed to parse response', error);
+  ```
+</ResponseField>
+
+<ResponseField name="debug" type="(message: string, ...args: unknown[]) => void">
+  Log debug messages (can be filtered).
+
+  ```typescript
+  ctx.log.debug('Token value', token);
+  ```
+</ResponseField>
+
+```typescript
+interface PluginLogger {
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(message: string, ...args: unknown[]): void;
+  debug(message: string, ...args: unknown[]): void;
+}
+```
+
+## Hook Types
+
+### PreRequestHook
+
+Executed before each request is sent. Can modify the request or abort execution.
+
+<ParamField path="ctx" type="PluginContext">
+  Context object containing request and utilities.
+</ParamField>
+
+<ParamField path="returns" type="PreRequestResult | Promise<PreRequestResult>">
+  Must return the modified (or original) request, and optionally abort.
+</ParamField>
+
+```typescript
+type PreRequestHook = (
+  ctx: PluginContext
+) => PreRequestResult | Promise<PreRequestResult>;
+
+interface PreRequestResult {
+  request: Request;
+  abort?: boolean;
+  abortReason?: string;
+}
+```
+
+**Example:**
+
+```typescript
+onPreRequest(ctx) {
+  // Abort requests to blocked domains
+  if (ctx.request.url.includes('blocked.com')) {
+    return {
+      request: ctx.request,
+      abort: true,
+      abortReason: 'Domain is blocked'
+    };
+  }
+
+  // Add authentication header
+  ctx.request.headers['Authorization'] = 'Bearer token';
+  return { request: ctx.request };
+}
+```
+
+### PostResponseHook
+
+Executed after each response is received. Can modify the response.
+
+<ParamField path="ctx" type="PluginContext">
+  Context object containing both request and response.
+</ParamField>
+
+<ParamField path="returns" type="PostResponseResult | Promise<PostResponseResult>">
+  Must return the modified (or original) response.
+</ParamField>
+
+```typescript
+type PostResponseHook = (
+  ctx: PluginContext
+) => PostResponseResult | Promise<PostResponseResult>;
+
+interface PostResponseResult {
+  response: Response;
+}
+```
+
+**Example:**
+
+```typescript
+onPostResponse(ctx) {
+  // Log failed requests
+  if (!ctx.response) return { response: ctx.response! };
+
+  if (ctx.response.statusCode >= 400) {
+    ctx.log.error('Request failed', ctx.response.status);
+  }
+
+  return { response: ctx.response };
+}
+```
+
+## Plugin Definition
+
+### definePlugin
+
+Helper function to create a type-safe plugin.
+
+<ParamField path="plugin" type="Plugin" required>
+  Plugin object with hook implementations.
+</ParamField>
+
+<ParamField path="returns" type="Plugin">
+  The same plugin object with type safety.
+</ParamField>
+
+```typescript
+function definePlugin(plugin: Plugin): Plugin;
+
+interface Plugin {
+  onPreRequest?: PreRequestHook;
+  onPostResponse?: PostResponseHook;
+}
+```
+
+**Example:**
+
+```typescript
+import { definePlugin } from '@api-client/plugin-sdk';
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    ctx.log.info('Request to', ctx.request.url);
+    return { request: ctx.request };
+  },
+
+  onPostResponse(ctx) {
+    ctx.log.info('Response status', ctx.response?.statusCode);
+    return { response: ctx.response! };
+  }
+});
+```
+
+<Tip>
+  Using `definePlugin` provides TypeScript autocomplete and type checking for plugin hooks.
+</Tip>
+
+## Helper Functions
+
+The SDK includes utility functions for common operations.
+
+### addHeader
+
+Add or overwrite a header on a request.
+
+<ParamField path="request" type="Request" required>
+  Request object to modify.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Header name (e.g., "Authorization").
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  Header value.
+</ParamField>
+
+<ParamField path="returns" type="Request">
+  New request object with header added (immutable).
+</ParamField>
+
+```typescript
+function addHeader(
+  request: Request,
+  name: string,
+  value: string
+): Request;
+```
+
+**Example:**
+
+```typescript
+import { definePlugin, addHeader } from '@api-client/plugin-sdk';
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    const modified = addHeader(
+      ctx.request,
+      'X-API-Key',
+      'secret-key'
+    );
+    return { request: modified };
+  }
+});
+```
+
+### removeHeader
+
+Remove a header from a request.
+
+<ParamField path="request" type="Request" required>
+  Request object to modify.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Header name to remove.
+</ParamField>
+
+<ParamField path="returns" type="Request">
+  New request object with header removed (immutable).
+</ParamField>
+
+```typescript
+function removeHeader(request: Request, name: string): Request;
+```
+
+**Example:**
+
+```typescript
+import { definePlugin, removeHeader } from '@api-client/plugin-sdk';
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    // Remove sensitive headers before logging
+    const sanitized = removeHeader(ctx.request, 'Authorization');
+    ctx.log.debug('Request headers', sanitized.headers);
+    return { request: ctx.request };
+  }
+});
+```
+
+### parseJsonBody
+
+Safely parse JSON response body.
+
+<ParamField path="response" type="Response" required>
+  Response object with body to parse.
+</ParamField>
+
+<ParamField path="returns" type="T | null">
+  Parsed JSON object or `null` if parsing fails.
+</ParamField>
+
+```typescript
+function parseJsonBody<T = unknown>(response: Response): T | null;
+```
+
+**Example:**
+
+```typescript
+import { definePlugin, parseJsonBody } from '@api-client/plugin-sdk';
+
+interface User {
+  id: string;
+  name: string;
+}
+
+export default definePlugin({
+  onPostResponse(ctx) {
+    if (!ctx.response) return { response: ctx.response! };
+
+    const data = parseJsonBody<User>(ctx.response);
+    if (data) {
+      ctx.log.info('User:', data.name);
+    }
+
+    return { response: ctx.response };
+  }
+});
+```
+
+### isSuccess
+
+Check if response has a 2xx status code.
+
+<ParamField path="response" type="Response" required>
+  Response object to check.
+</ParamField>
+
+<ParamField path="returns" type="boolean">
+  `true` if status code is 200-299, `false` otherwise.
+</ParamField>
+
+```typescript
+function isSuccess(response: Response): boolean;
+```
+
+**Example:**
+
+```typescript
+import { definePlugin, isSuccess } from '@api-client/plugin-sdk';
+
+export default definePlugin({
+  onPostResponse(ctx) {
+    if (!ctx.response) return { response: ctx.response! };
+
+    if (isSuccess(ctx.response)) {
+      ctx.log.info('Request succeeded');
+    } else {
+      ctx.log.warn('Request failed with', ctx.response.statusCode);
+    }
+
+    return { response: ctx.response };
+  }
+});
+```
+
+### isError
+
+Check if response has a 4xx or 5xx status code.
+
+<ParamField path="response" type="Response" required>
+  Response object to check.
+</ParamField>
+
+<ParamField path="returns" type="boolean">
+  `true` if status code is 400+, `false` otherwise.
+</ParamField>
+
+```typescript
+function isError(response: Response): boolean;
+```
+
+**Example:**
+
+```typescript
+import { definePlugin, isError } from '@api-client/plugin-sdk';
+
+export default definePlugin({
+  onPostResponse(ctx) {
+    if (!ctx.response) return { response: ctx.response! };
+
+    if (isError(ctx.response)) {
+      ctx.log.error('Error response:', ctx.response.body);
+    }
+
+    return { response: ctx.response };
+  }
+});
+```
+
+## Complete Example
+
+Here's a complete plugin that demonstrates most SDK features:
+
+```typescript
+import {
+  definePlugin,
+  addHeader,
+  parseJsonBody,
+  isSuccess,
+  isError
+} from '@api-client/plugin-sdk';
+
+interface TokenResponse {
+  access_token: string;
+  expires_in: number;
+}
+
+export default definePlugin({
+  onPreRequest(ctx) {
+    // Get stored token
+    const token = ctx.storage.get<string>('access_token');
+    
+    if (token) {
+      // Add authentication header
+      const authedRequest = addHeader(
+        ctx.request,
+        'Authorization',
+        `Bearer ${token}`
+      );
+      
+      ctx.log.info('Added auth token to request');
+      return { request: authedRequest };
+    }
+
+    ctx.log.warn('No auth token available');
+    return { request: ctx.request };
+  },
+
+  onPostResponse(ctx) {
+    if (!ctx.response) return { response: ctx.response! };
+
+    // Check if this is a token endpoint response
+    if (ctx.request.url.includes('/oauth/token')) {
+      const data = parseJsonBody<TokenResponse>(ctx.response);
+      
+      if (data && data.access_token) {
+        // Store token for future requests
+        ctx.storage.set('access_token', data.access_token);
+        ctx.log.info('Stored new access token');
+      }
+    }
+
+    // Log response status
+    if (isSuccess(ctx.response)) {
+      ctx.log.info('Request succeeded:', ctx.response.statusCode);
+    } else if (isError(ctx.response)) {
+      ctx.log.error('Request failed:', ctx.response.status);
+    }
+
+    return { response: ctx.response };
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Plugin Examples" icon="lightbulb" href="/plugins/examples">
+    Explore real-world plugin examples from the codebase.
+  </Card>
+  
+  <Card title="Plugin Overview" icon="book" href="/plugins/overview">
+    Learn about plugin architecture and security model.
+  </Card>
+</CardGroup>

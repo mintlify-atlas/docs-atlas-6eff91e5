@@ -1,0 +1,653 @@
+---
+title: Contributing
+description: Guidelines for contributing to the Eru project
+---
+
+## Welcome Contributors!
+
+Thank you for your interest in contributing to Eru! This guide will help you get started with contributing code, documentation, bug reports, and feature requests.
+
+Eru is an open-source project built by the community, and we welcome contributions of all kinds.
+
+## Getting Started
+
+<Steps>
+  <Step title="Fork the repository">
+    Visit [github.com/royalbhati/eru](https://github.com/royalbhati/eru) and click the **Fork** button in the top-right corner.
+  </Step>
+  
+  <Step title="Clone your fork">
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/eru.git
+    cd eru
+    ```
+  </Step>
+  
+  <Step title="Add upstream remote">
+    ```bash
+    git remote add upstream https://github.com/royalbhati/eru.git
+    ```
+    
+    This allows you to sync with the main repository.
+  </Step>
+  
+  <Step title="Create a feature branch">
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
+    
+    Use descriptive branch names:
+    - `feature/workflow-variables`
+    - `fix/sse-reconnect-timeout`
+    - `docs/plugin-api-examples`
+  </Step>
+</Steps>
+
+## Development Setup
+
+Before you can start contributing code, set up your development environment:
+
+### Prerequisites
+
+Ensure you have all required tools installed:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Version 18 or higher
+  </Card>
+  <Card title="pnpm" icon="package">
+    Version 8 or higher
+  </Card>
+  <Card title="Go" icon="golang">
+    Version 1.21 or higher
+  </Card>
+  <Card title="Rust" icon="rust">
+    Latest stable version
+  </Card>
+</CardGroup>
+
+See the [Building from Source](/development/building-from-source) guide for detailed installation instructions.
+
+### Installation
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build Go core
+pnpm build:core
+
+# Start development server
+pnpm dev
+```
+
+<Info>
+The development server includes hot reload for UI changes. For Go or Rust changes, you'll need to rebuild and restart.
+</Info>
+
+## Code Style Guidelines
+
+We follow language-specific conventions to keep the codebase clean and maintainable.
+
+### Go Code Style
+
+<CardGroup cols={2}>
+  <Card title="Format with gofmt" icon="code">
+    ```bash
+    cd apps/desktop/core
+    go fmt ./...
+    ```
+    
+    Always format before committing.
+  </Card>
+  
+  <Card title="Follow Go conventions" icon="book">
+    - Use `CamelCase` for exported names
+    - Use `camelCase` for unexported names
+    - Add package comments
+    - Keep functions focused and small
+  </Card>
+  
+  <Card title="Error handling" icon="triangle-exclamation">
+    ```go
+    // ✅ Good
+    if err != nil {
+        return nil, fmt.Errorf("failed to execute: %w", err)
+    }
+    
+    // ❌ Bad
+    if err != nil {
+        panic(err)
+    }
+    ```
+  </Card>
+  
+  <Card title="Use standard library" icon="box">
+    Prefer Go's standard library over third-party packages when possible.
+  </Card>
+</CardGroup>
+
+**Example Go code:**
+
+```go
+// Package engine handles HTTP request execution.
+package engine
+
+import (
+    "context"
+    "fmt"
+    "net/http"
+)
+
+// Execute sends an HTTP request and returns the response.
+func (e *Engine) Execute(ctx context.Context, req *Request) (*Response, error) {
+    if req.URL == "" {
+        return nil, fmt.Errorf("URL is required")
+    }
+    
+    // Implementation...
+    return resp, nil
+}
+```
+
+### TypeScript/JavaScript Style
+
+<CardGroup cols={2}>
+  <Card title="Use TypeScript" icon="code">
+    All new code should be written in TypeScript, not JavaScript.
+  </Card>
+  
+  <Card title="Follow ESLint" icon="circle-check">
+    The project includes ESLint configuration. Fix warnings before committing.
+  </Card>
+  
+  <Card title="Prefer const/let" icon="lock">
+    ```typescript
+    // ✅ Good
+    const userName = 'John';
+    let counter = 0;
+    
+    // ❌ Bad
+    var userName = 'John';
+    ```
+  </Card>
+  
+  <Card title="Use arrow functions" icon="arrow-right">
+    ```typescript
+    // ✅ Good
+    const handleClick = () => {
+      console.log('clicked');
+    };
+    
+    // ❌ Bad
+    function handleClick() {
+      console.log('clicked');
+    }
+    ```
+  </Card>
+</CardGroup>
+
+**Example TypeScript code:**
+
+```typescript
+import { createSignal } from 'solid-js';
+import type { Request, Response } from './types';
+
+interface ExecuteOptions {
+  timeout?: number;
+  retries?: number;
+}
+
+export const RequestExecutor = () => {
+  const [isLoading, setIsLoading] = createSignal(false);
+  
+  const execute = async (request: Request, options?: ExecuteOptions): Promise<Response> => {
+    setIsLoading(true);
+    
+    try {
+      const result = await invoke('rpc_call', {
+        method: 'request.execute',
+        params: request
+      });
+      return result as Response;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  return { execute, isLoading };
+};
+```
+
+### Rust Code Style
+
+<CardGroup cols={2}>
+  <Card title="Format with rustfmt" icon="code">
+    ```bash
+    cd apps/desktop/src-tauri
+    cargo fmt
+    ```
+  </Card>
+  
+  <Card title="Check with Clippy" icon="circle-check">
+    ```bash
+    cargo clippy -- -D warnings
+    ```
+  </Card>
+</CardGroup>
+
+**Example Rust code:**
+
+```rust
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RpcRequest {
+    pub jsonrpc: &'static str,
+    pub id: u64,
+    pub method: String,
+    pub params: serde_json::Value,
+}
+
+#[tauri::command]
+async fn execute_request(
+    method: String,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    // Implementation...
+    Ok(result)
+}
+```
+
+## Making Changes
+
+### Code Changes
+
+<Steps>
+  <Step title="Write code following style guidelines">
+    See the [Code Style Guidelines](#code-style-guidelines) section above.
+  </Step>
+  
+  <Step title="Test your changes">
+    ```bash
+    # Test Go code
+    cd apps/desktop/core
+    go test ./...
+    
+    # Test manually in dev mode
+    pnpm dev
+    ```
+  </Step>
+  
+  <Step title="Format code before committing">
+    ```bash
+    # Format Go code
+    cd apps/desktop/core && go fmt ./...
+    
+    # Format Rust code
+    cd apps/desktop/src-tauri && cargo fmt
+    ```
+  </Step>
+</Steps>
+
+### Adding Tests
+
+All new features should include tests when applicable.
+
+**Go tests example:**
+
+```go
+package engine
+
+import (
+    "testing"
+    "github.com/stretchr/testify/assert"
+)
+
+func TestExecute(t *testing.T) {
+    engine := New(nil, Config{Timeout: 5000})
+    
+    req := &Request{
+        Method: "GET",
+        URL:    "https://httpbin.org/get",
+    }
+    
+    resp, err := engine.Execute(req)
+    
+    assert.NoError(t, err)
+    assert.Equal(t, 200, resp.Status)
+}
+```
+
+**Run tests:**
+
+```bash
+# All tests
+go test ./...
+
+# Specific package with verbose output
+go test -v ./internal/engine
+
+# With coverage
+go test -cover ./...
+```
+
+## Commit Message Guidelines
+
+We follow [Conventional Commits](https://www.conventionalcommits.org/) for clear and semantic commit messages.
+
+### Format
+
+```
+<type>: <description>
+
+[optional body]
+
+[optional footer]
+```
+
+### Types
+
+<CardGroup cols={3}>
+  <Card title="feat" icon="plus">
+    New feature
+    ```
+    feat: add JSONPath variable extraction
+    ```
+  </Card>
+  
+  <Card title="fix" icon="wrench">
+    Bug fix
+    ```
+    fix: resolve SSE connection timeout
+    ```
+  </Card>
+  
+  <Card title="docs" icon="book">
+    Documentation
+    ```
+    docs: update plugin API examples
+    ```
+  </Card>
+  
+  <Card title="refactor" icon="recycle">
+    Code refactor
+    ```
+    refactor: simplify request handler
+    ```
+  </Card>
+  
+  <Card title="test" icon="flask">
+    Add/update tests
+    ```
+    test: add engine execution tests
+    ```
+  </Card>
+  
+  <Card title="chore" icon="gear">
+    Maintenance
+    ```
+    chore: update dependencies
+    ```
+  </Card>
+</CardGroup>
+
+### Examples
+
+<CodeGroup>
+```bash Good Examples
+# Simple feature
+feat: add workflow variable editor
+
+# Bug fix with context
+fix: prevent SSE reconnect loop
+
+Fixed an issue where SSE connections would continuously
+reconnect when server returned 500 errors.
+
+# Breaking change
+feat!: redesign plugin API
+
+BREAKING CHANGE: Plugin interface now requires version field
+```
+
+```bash Bad Examples
+# Too vague
+fixed stuff
+
+# No type
+add new feature
+
+# Not descriptive
+update code
+```
+</CodeGroup>
+
+<Warning>
+Commit messages should be clear and descriptive. Future contributors (including yourself!) should understand what changed by reading the message alone.
+</Warning>
+
+## Pull Request Process
+
+Once your changes are ready, open a pull request to merge them into the main repository.
+
+<Steps>
+  <Step title="Update your branch">
+    Sync with the latest upstream changes:
+    ```bash
+    git fetch upstream
+    git rebase upstream/main
+    ```
+  </Step>
+  
+  <Step title="Push to your fork">
+    ```bash
+    git push origin feature/your-feature-name
+    ```
+  </Step>
+  
+  <Step title="Open a pull request">
+    1. Go to [github.com/royalbhati/eru](https://github.com/royalbhati/eru)
+    2. Click **Pull requests** → **New pull request**
+    3. Click **compare across forks**
+    4. Select your fork and branch
+    5. Click **Create pull request**
+  </Step>
+  
+  <Step title="Fill out PR template">
+    Provide a clear description of your changes:
+    
+    - **What** does this PR do?
+    - **Why** is this change needed?
+    - **How** was it implemented?
+    - **Testing** - How did you verify it works?
+    - **Screenshots** (if UI changes)
+  </Step>
+  
+  <Step title="Wait for review">
+    Maintainers will review your PR and may request changes. Address feedback and push updates to your branch.
+  </Step>
+  
+  <Step title="PR gets merged">
+    Once approved, a maintainer will merge your PR. Congratulations! 🎉
+  </Step>
+</Steps>
+
+### PR Checklist
+
+Before submitting, ensure:
+
+- [ ] Code follows style guidelines (formatted with `go fmt`, `cargo fmt`)
+- [ ] Tests pass (`go test ./...`)
+- [ ] Documentation updated (if adding new features)
+- [ ] Commit messages follow convention
+- [ ] No merge conflicts with `main`
+- [ ] PR description is clear and complete
+
+## Reporting Issues
+
+Found a bug or have a feature request? Open an issue on GitHub.
+
+### Bug Reports
+
+When reporting bugs, include:
+
+<Accordion title="Bug Report Template">
+  **Description**
+  
+  A clear description of the bug.
+  
+  **Steps to Reproduce**
+  
+  1. Go to '...'
+  2. Click on '...'
+  3. Scroll down to '...'
+  4. See error
+  
+  **Expected Behavior**
+  
+  What you expected to happen.
+  
+  **Actual Behavior**
+  
+  What actually happened.
+  
+  **Environment**
+  
+  - OS: [e.g., macOS 14.2, Ubuntu 22.04, Windows 11]
+  - Eru Version: [e.g., 0.1.0]
+  - Architecture: [e.g., ARM64, x86_64]
+  
+  **Screenshots**
+  
+  If applicable, add screenshots.
+  
+  **Logs**
+  
+  ```
+  Paste relevant error messages or logs here
+  ```
+</Accordion>
+
+### Feature Requests
+
+When requesting features, include:
+
+<Accordion title="Feature Request Template">
+  **Feature Description**
+  
+  A clear description of the feature you'd like to see.
+  
+  **Use Case**
+  
+  Why would this feature be useful? What problem does it solve?
+  
+  **Proposed Solution**
+  
+  If you have ideas on how to implement it, share them here.
+  
+  **Alternatives Considered**
+  
+  Are there workarounds or alternative approaches?
+  
+  **Additional Context**
+  
+  Screenshots, mockups, or examples from other tools.
+</Accordion>
+
+<Tip>
+Before opening an issue, search existing issues to see if someone has already reported it. You can add comments or reactions to existing issues.
+</Tip>
+
+## Areas to Contribute
+
+Not sure where to start? Here are some areas where contributions are especially welcome:
+
+<CardGroup cols={2}>
+  <Card title="Plugin System" icon="plug">
+    - Create example plugins
+    - Improve plugin SDK documentation
+    - Add plugin lifecycle hooks
+  </Card>
+  
+  <Card title="Workflow Features" icon="diagram-project">
+    - Add more JSONPath examples
+    - Improve error handling
+    - Add workflow templates
+  </Card>
+  
+  <Card title="Testing" icon="flask">
+    - Add Go unit tests
+    - Add integration tests
+    - Test edge cases
+  </Card>
+  
+  <Card title="Documentation" icon="book">
+    - Add tutorials
+    - Improve API docs
+    - Fix typos
+  </Card>
+  
+  <Card title="UI/UX" icon="paintbrush">
+    - Improve keyboard shortcuts
+    - Add dark mode enhancements
+    - Accessibility improvements
+  </Card>
+  
+  <Card title="Performance" icon="gauge-high">
+    - Optimize large response rendering
+    - Reduce memory usage
+    - Profile and fix bottlenecks
+  </Card>
+</CardGroup>
+
+### Good First Issues
+
+Look for issues labeled `good first issue` on GitHub. These are beginner-friendly tasks that are well-documented and scoped.
+
+## Community Guidelines
+
+We are committed to providing a welcoming and inclusive environment for all contributors.
+
+<CardGroup cols={2}>
+  <Card title="Be Respectful" icon="handshake">
+    Treat everyone with respect and kindness. No harassment or discrimination.
+  </Card>
+  
+  <Card title="Be Collaborative" icon="users">
+    Work together, share knowledge, and help each other succeed.
+  </Card>
+  
+  <Card title="Be Patient" icon="clock">
+    Maintainers are volunteers. Reviews may take time.
+  </Card>
+  
+  <Card title="Be Constructive" icon="comments">
+    Provide helpful feedback. Criticism should be constructive, not destructive.
+  </Card>
+</CardGroup>
+
+## Questions?
+
+If you have questions about contributing:
+
+1. Check the [documentation](https://royalbhati.github.io/eru/docs/)
+2. Search [existing issues](https://github.com/royalbhati/eru/issues)
+3. Open a new issue with your question
+4. Join discussions on GitHub
+
+## License
+
+By contributing to Eru, you agree that your contributions will be licensed under the [MIT License](https://github.com/royalbhati/eru/blob/main/LICENSE).
+
+All submissions are subject to review and may be rejected if they don't align with the project's goals or quality standards.
+
+## Recognition
+
+Contributors are recognized in:
+
+- GitHub's contributor graph
+- Release notes (for significant contributions)
+- The project's README (for major features)
+
+Thank you for helping make Eru better! 🚀

@@ -1,0 +1,663 @@
+---
+title: Response Diff
+description: Compare API responses to detect changes, regressions, and ensure consistency with tree-aware JSON diffing
+---
+
+## Overview
+
+The Response Diff feature provides powerful tree-aware JSON comparison capabilities. Save baseline responses and compare them against new responses to detect:
+
+- API contract changes
+- Unexpected response modifications
+- Breaking changes in APIs
+- Data structure regressions
+
+<CardGroup cols={2}>
+  <Card title="Tree-Aware Diffing" icon="code-branch">
+    Intelligent JSON comparison with path tracking
+  </Card>
+  <Card title="Ignore Patterns" icon="filter">
+    Exclude dynamic fields like timestamps
+  </Card>
+  <Card title="Export Options" icon="file-export">
+    Generate Markdown or JSON reports
+  </Card>
+  <Card title="Visual Changes" icon="eye">
+    See added, removed, and modified fields
+  </Card>
+</CardGroup>
+
+## Saving Baseline Responses
+
+First, save a response as a baseline for future comparison:
+
+```go
+baseline := &types.SavedResponse{
+    ID:        "baseline-v1",
+    RequestID: "req-123",
+    Response: types.Response{
+        StatusCode: 200,
+        Status:     "200 OK",
+        Headers: map[string]string{
+            "Content-Type": "application/json",
+        },
+        Body: `{
+            "id": 1,
+            "name": "John Doe",
+            "email": "john@example.com",
+            "created_at": "2024-01-15T10:00:00Z"
+        }`,
+        Duration: 145,
+    },
+}
+```
+
+## Computing Diffs
+
+<Steps>
+  <Step title="Create Diff Engine">
+    ```go
+    engine := diff.NewEngine()
+    ```
+  </Step>
+  
+  <Step title="Get Current Response">
+    ```go
+    current := &types.SavedResponse{
+        ID:        "current-v2",
+        RequestID: "req-123",
+        Response:  currentResponse,
+    }
+    ```
+  </Step>
+  
+  <Step title="Compute Diff">
+    ```go
+    result, err := engine.ComputeDiff(
+        baseline,
+        current,
+        []string{"created_at", "*.timestamp"}, // Fields to ignore
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    ```
+  </Step>
+  
+  <Step title="Analyze Changes">
+    ```go
+    fmt.Printf("Status Match: %v\n", result.StatusMatch)
+    fmt.Printf("Added: %d\n", result.AddedCount)
+    fmt.Printf("Removed: %d\n", result.RemovedCount)
+    fmt.Printf("Modified: %d\n", result.ModifiedCount)
+    ```
+  </Step>
+</Steps>
+
+## Diff Result Structure
+
+```go
+type DiffResult struct {
+    LeftID        string      // Baseline response ID
+    RightID       string      // Current response ID
+    StatusMatch   bool        // Status codes match
+    LeftStatus    int         // Baseline status code
+    RightStatus   int         // Current status code
+    LatencyDiff   int64       // Latency difference (ms)
+    HeaderChanges []DiffChange // Header modifications
+    BodyChanges   []DiffChange // Body modifications
+    AddedCount    int         // Total fields added
+    RemovedCount  int         // Total fields removed
+    ModifiedCount int         // Total fields modified
+    IgnoredPaths  []string    // Paths that were ignored
+}
+```
+
+## Understanding Changes
+
+### Change Types
+
+Each change has a type indicating what happened:
+
+```go
+const (
+    DiffAdded    DiffType = "added"    // Field exists in current only
+    DiffRemoved  DiffType = "removed"  // Field exists in baseline only
+    DiffModified DiffType = "modified" // Field value changed
+)
+```
+
+### Change Object
+
+```go
+type DiffChange struct {
+    Path       string      // JSON path to changed field
+    Type       DiffType    // Type of change
+    LeftValue  interface{} // Baseline value
+    RightValue interface{} // Current value
+}
+```
+
+### Example Changes
+
+<Tabs>
+  <Tab title="Added Field">
+    ```go
+    DiffChange{
+        Path:       "user.phone",
+        Type:       DiffAdded,
+        RightValue: "+1-555-0123",
+    }
+    ```
+    
+    A new field `phone` was added to the `user` object.
+  </Tab>
+  
+  <Tab title="Removed Field">
+    ```go
+    DiffChange{
+        Path:      "user.middle_name",
+        Type:      DiffRemoved,
+        LeftValue: "Michael",
+    }
+    ```
+    
+    The field `middle_name` was removed from the `user` object.
+  </Tab>
+  
+  <Tab title="Modified Field">
+    ```go
+    DiffChange{
+        Path:       "user.status",
+        Type:       DiffModified,
+        LeftValue:  "pending",
+        RightValue: "active",
+    }
+    ```
+    
+    The `status` field value changed from `"pending"` to `"active"`.
+  </Tab>
+</Tabs>
+
+## Tree-Aware JSON Diffing
+
+The diff engine performs intelligent JSON comparison with path tracking:
+
+### Nested Objects
+
+```json Baseline
+{
+  "user": {
+    "name": "John",
+    "email": "john@example.com"
+  }
+}
+```
+
+```json Current
+{
+  "user": {
+    "name": "Jane",
+    "email": "john@example.com"
+  }
+}
+```
+
+Detected change:
+```go
+DiffChange{
+    Path:       "user.name",
+    Type:       DiffModified,
+    LeftValue:  "John",
+    RightValue: "Jane",
+}
+```
+
+### Arrays
+
+Array elements are compared by index:
+
+```json Baseline
+{
+  "items": [1, 2, 3]
+}
+```
+
+```json Current
+{
+  "items": [1, 2, 4]
+}
+```
+
+Detected change:
+```go
+DiffChange{
+    Path:       "items[2]",
+    Type:       DiffModified,
+    LeftValue:  3,
+    RightValue: 4,
+}
+```
+
+Source: `apps/desktop/core/internal/diff/diff.go:243-271`
+
+### Complex Nested Structures
+
+```json Baseline
+{
+  "users": [
+    {"id": 1, "name": "Alice"},
+    {"id": 2, "name": "Bob"}
+  ]
+}
+```
+
+```json Current
+{
+  "users": [
+    {"id": 1, "name": "Alice"},
+    {"id": 2, "name": "Bobby"}
+  ]
+}
+```
+
+Detected change:
+```go
+DiffChange{
+    Path:       "users[1].name",
+    Type:       DiffModified,
+    LeftValue:  "Bob",
+    RightValue: "Bobby",
+}
+```
+
+## Ignoring Dynamic Fields
+
+Many API responses contain dynamic fields that should be ignored during comparison:
+
+### Exact Path Matching
+
+```go
+ignorePaths := []string{
+    "created_at",
+    "updated_at",
+    "request_id",
+}
+
+result, _ := engine.ComputeDiff(baseline, current, ignorePaths)
+```
+
+### Wildcard Patterns
+
+<Tabs>
+  <Tab title="Suffix Wildcard">
+    Ignore all fields ending with a pattern:
+    
+    ```go
+    ignorePaths := []string{
+        "*.timestamp",   // Matches any field ending in .timestamp
+        "*.created_at",  // Matches user.created_at, post.created_at, etc.
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Prefix Wildcard">
+    Ignore all fields under a path:
+    
+    ```go
+    ignorePaths := []string{
+        "metadata.*",    // Ignore all fields under metadata
+        "stats.*",       // Ignore all fields under stats
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Array Wildcard">
+    Ignore fields in all array elements:
+    
+    ```go
+    ignorePaths := []string{
+        "users[*].created_at",  // Ignore created_at in all users
+        "posts[*].timestamp",   // Ignore timestamp in all posts
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Source: `apps/desktop/core/internal/diff/diff.go:288-327`
+
+### Common Ignore Patterns
+
+```go
+// Typical dynamic fields to ignore
+ignorePaths := []string{
+    // Timestamps
+    "*.created_at",
+    "*.updated_at",
+    "*.timestamp",
+    "*.last_modified",
+    
+    // Request tracking
+    "request_id",
+    "trace_id",
+    "*.request_id",
+    
+    // Version/ETag
+    "*.version",
+    "*.etag",
+    
+    // Dynamic IDs
+    "session_id",
+    "*.session_id",
+}
+```
+
+## Exporting Diff Reports
+
+### Markdown Export
+
+Generate a human-readable Markdown report:
+
+```go
+markdown := engine.ExportMarkdown(result, "Baseline v1.0", "Current v2.0")
+
+// Save to file
+os.WriteFile("diff-report.md", []byte(markdown), 0644)
+```
+
+Generated report structure:
+
+```markdown
+# API Response Diff Report
+
+**Left:** Baseline v1.0
+**Right:** Current v2.0
+
+## Summary
+
+| Metric | Value |
+|--------|-------|
+| Status Match | true |
+| Left Status | 200 |
+| Right Status | 200 |
+| Latency Diff | +15ms |
+| Added | 2 |
+| Removed | 1 |
+| Modified | 3 |
+
+## Body Changes
+
+| Path | Type | Left | Right |
+|------|------|------|-------|
+| `user.name` | modified | `John` | `Jane` |
+| `user.phone` | added | - | `+1-555-0123` |
+...
+```
+
+Source: `apps/desktop/core/internal/diff/diff.go:330-388`
+
+### JSON Export
+
+Export as structured JSON for programmatic processing:
+
+```go
+jsonReport, err := engine.ExportJSON(result)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Save to file
+os.WriteFile("diff-report.json", []byte(jsonReport), 0644)
+
+// Or parse for further processing
+var report types.DiffResult
+json.Unmarshal([]byte(jsonReport), &report)
+```
+
+## Use Cases
+
+### API Contract Testing
+
+Detect breaking changes in API responses:
+
+```go
+// Save baseline from v1 API
+baselineV1, _ := executeRequest("/api/v1/users/123")
+
+// Compare with v2 API
+currentV2, _ := executeRequest("/api/v2/users/123")
+
+result, _ := engine.ComputeDiff(baselineV1, currentV2, nil)
+
+if result.RemovedCount > 0 {
+    fmt.Println("WARNING: Fields were removed (breaking change!)")
+    for _, change := range result.BodyChanges {
+        if change.Type == types.DiffRemoved {
+            fmt.Printf("  - %s\n", change.Path)
+        }
+    }
+}
+```
+
+### Regression Testing
+
+Ensure responses haven't changed unexpectedly:
+
+```go
+// Compare current response with saved baseline
+result, _ := engine.ComputeDiff(
+    savedBaseline,
+    currentResponse,
+    []string{"*.timestamp", "*.request_id"},
+)
+
+if result.AddedCount+result.RemovedCount+result.ModifiedCount > 0 {
+    fmt.Println("REGRESSION DETECTED!")
+    markdown := engine.ExportMarkdown(result, "Expected", "Actual")
+    sendAlertEmail(markdown)
+}
+```
+
+### Environment Comparison
+
+Compare responses across environments:
+
+```go
+// Get response from staging
+stagingResp, _ := executeRequest("https://staging.api.com/users/1")
+
+// Get response from production
+prodResp, _ := executeRequest("https://api.com/users/1")
+
+result, _ := engine.ComputeDiff(stagingResp, prodResp, ignorePaths)
+
+if result.ModifiedCount > 0 {
+    fmt.Println("Differences between staging and production:")
+    for _, change := range result.BodyChanges {
+        fmt.Printf("  %s: %v -> %v\n", 
+            change.Path, change.LeftValue, change.RightValue)
+    }
+}
+```
+
+### Response Schema Validation
+
+Track API evolution over time:
+
+```go
+type APIVersion struct {
+    Version  string
+    Response *types.SavedResponse
+}
+
+versions := []APIVersion{
+    {"v1.0", responseV1_0},
+    {"v1.1", responseV1_1},
+    {"v2.0", responseV2_0},
+}
+
+for i := 0; i < len(versions)-1; i++ {
+    left := versions[i]
+    right := versions[i+1]
+    
+    result, _ := engine.ComputeDiff(
+        left.Response,
+        right.Response,
+        ignorePaths,
+    )
+    
+    fmt.Printf("\n%s -> %s:\n", left.Version, right.Version)
+    fmt.Printf("  Added: %d, Removed: %d, Modified: %d\n",
+        result.AddedCount, result.RemovedCount, result.ModifiedCount)
+}
+```
+
+## Header Comparison
+
+Diff also compares response headers:
+
+```go
+for _, change := range result.HeaderChanges {
+    switch change.Type {
+    case types.DiffAdded:
+        fmt.Printf("Header added: %s = %s\n", 
+            change.Path, change.RightValue)
+    case types.DiffRemoved:
+        fmt.Printf("Header removed: %s\n", change.Path)
+    case types.DiffModified:
+        fmt.Printf("Header changed: %s (%v -> %v)\n",
+            change.Path, change.LeftValue, change.RightValue)
+    }
+}
+```
+
+Common header changes to monitor:
+- `Content-Type` changes
+- Cache-Control modifications
+- Security header additions/removals
+- API version headers
+
+## Performance Metrics
+
+Compare response latency:
+
+```go
+if result.LatencyDiff > 100 {
+    fmt.Printf("WARNING: Response time increased by %dms\n", 
+        result.LatencyDiff)
+} else if result.LatencyDiff < -50 {
+    fmt.Printf("IMPROVEMENT: Response time decreased by %dms\n", 
+        -result.LatencyDiff)
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Comprehensive Ignore Lists">
+    Always ignore timestamps, request IDs, and other dynamic fields:
+    
+    ```go
+    ignorePaths := []string{
+        "*.created_at",
+        "*.updated_at",
+        "*.timestamp",
+        "request_id",
+        "trace_id",
+    }
+    ```
+  </Step>
+  
+  <Step title="Save Baselines for Each Version">
+    Keep baseline responses for each API version to track evolution.
+  </Step>
+  
+  <Step title="Automate Diff Checks">
+    Integrate diff checks into CI/CD pipelines to catch breaking changes early.
+  </Step>
+  
+  <Step title="Review All Changes">
+    Even "expected" changes should be reviewed to ensure they're intentional.
+  </Step>
+  
+  <Step title="Document Breaking Changes">
+    When changes are detected, document them for API consumers.
+  </Step>
+</Steps>
+
+<Warning>
+**Type Changes Are Breaking**
+
+Changing a field's type (e.g., number to string) is detected as a modification and is typically a breaking change for API consumers.
+</Warning>
+
+## Troubleshooting
+
+<Accordion title="Too many changes detected">
+  **Problem**: Diff shows many changes for fields that should be ignored
+  
+  **Solution**: Expand your ignore patterns:
+  
+  ```go
+  // Add more comprehensive patterns
+  ignorePaths := []string{
+      "*.timestamp",     // All timestamp fields
+      "*.created_at",
+      "*.updated_at",
+      "metadata.*",      // All metadata fields
+      "users[*].id",     // IDs in user arrays
+  }
+  ```
+</Accordion>
+
+<Accordion title="Array order differences">
+  **Problem**: Arrays have same items but different order
+  
+  **Limitation**: The diff engine compares arrays by index position. Items in different positions are considered different.
+  
+  **Workaround**: If order doesn't matter:
+  - Sort arrays before comparison
+  - Or ignore the array field entirely
+  - Or implement custom comparison logic
+</Accordion>
+
+<Accordion title="Large diffs are slow">
+  **Problem**: Comparing very large responses is slow
+  
+  **Solutions**:
+  - Ignore large nested structures that don't need comparison
+  - Compare only critical paths
+  - Consider comparing checksums for large fields
+</Accordion>
+
+<Accordion title="Non-JSON responses">
+  **Limitation**: Tree-aware diffing only works for JSON responses.
+  
+  **Behavior**: Non-JSON responses fall back to simple text comparison:
+  
+  ```go
+  if left.Response.Body != right.Response.Body {
+      // Entire body is marked as modified
+  }
+  ```
+  
+  Source: `apps/desktop/core/internal/diff/diff.go:60-69`
+</Accordion>
+
+## Implementation Details
+
+The diff engine uses:
+
+- **Recursive tree traversal** for nested JSON
+- **Sorted key iteration** for consistent output
+- **Reflection-based type checking** for robust comparisons
+- **Path tracking** for precise change location
+
+Key algorithm:
+1. Parse both responses as JSON
+2. Recursively compare object trees
+3. Track path as traversal proceeds
+4. Check ignore patterns at each path
+5. Collect all changes with full path context
+
+Source: `apps/desktop/core/internal/diff/diff.go:155-286`
