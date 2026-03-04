@@ -1,0 +1,85 @@
+{
+  "projectType": "general",
+  "projectName": "Eru",
+  "projectDescription": "A fast, minimal, extensible API client built with Go, Tauri, and SolidJS",
+  "theme": "aspen",
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/collections",
+              "features/environments",
+              "features/requests",
+              "features/workflows"
+            ]
+          },
+          {
+            "group": "Advanced Features",
+            "pages": [
+              "advanced/plugins",
+              "advanced/git-sync",
+              "advanced/websocket-sse",
+              "advanced/load-testing",
+              "advanced/response-diff"
+            ]
+          },
+          {
+            "group": "Plugin Development",
+            "pages": [
+              "plugins/overview",
+              "plugins/plugin-sdk",
+              "plugins/examples"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/architecture",
+              "development/building-from-source",
+              "development/contributing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Lightning-fast Go-powered backend",
+    "Workflow editor with JSONPath variable extraction",
+    "Git-based collection sync for team collaboration",
+    "Plugin system for custom extensions",
+    "Collections and environment management",
+    "WebSocket and Server-Sent Events support",
+    "Cross-platform desktop app (macOS, Windows, Linux)",
+    "Load testing capabilities",
+    "Response comparison and diff viewer"
+  ],
+  "publicApiSurface": [
+    "Request execution engine",
+    "Plugin hooks (onPreRequest, onPostResponse)",
+    "Collection management API",
+    "Environment variables API",
+    "Git sync operations",
+    "WebSocket client",
+    "SSE client",
+    "Load test runner",
+    "Response diff engine",
+    "Import/Export (Postman, OpenAPI)",
+    "Plugin SDK (@api-client/plugin-sdk)"
+  ]
+}
